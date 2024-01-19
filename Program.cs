@@ -1,22 +1,38 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 
 namespace SwissbitSecureSDUtils
 {
-    // Seltsam: CardManagerLite.exe und CardManagerCLI.exe gehen nicht mit USB.  Aber CardManager.exe geht.
-    //          Sind diese zwei EXE Dateien vielleicht nur für die SD-Kartenlösung???
+    // The following commands have only been tested with the USB version of PU-50n, not with the PU-45n SD card
+
+    // There is a big Problem with CardManagerLite.exe and CardManagerCLI.exe
+    // For the USB PU-50n, CardManagement.dll cannot access "G:\". It can only access the name "Swissbit Secure USB PU-50n DP 0".
+    // You can verify this by query "G:\" in CardManager.exe .
+    // The big problem is that CardManagerLite.exe and CardManagerCli.exe only accept "G:\", not names.
+    // Therefore, you cannot use the CLI tool for the USB stick! Not good!
+    // TO FIX THIS ISSUE, EDIT CARDMANAGERCLI.EXE BY DISABLING THE SYNTAX CHECK FOR THE "MOUNTPOINT" ARGUMENT:
+    // Search:  75 1F 0F BE 02 50 FF 15 D8 D2 40 00 8B 7D FC 83 C4 04 85 C0 74 0E 8B 47 0C 80 78 01 3A 74
+    // Replace: 90 90 0F BE 02 50 FF 15 D8 D2 40 00 8B 7D FC 83 C4 04 85 C0 90 90 8B 47 0C 80 78 01 3A EB
+    //          ^^ ^^                                                       ^^ ^^                      ^^
 
     internal class SecureSDUtils
     {
-
         // TODO: Implement more methods of CardManagement.dll
 
-        #region verify (Karte entsperren)
+        // Error Messages collected:
+        // Return 0000 : OK
+        // Return 9001 : Change Protection Profile (Partition): Sum of Partition sizes is larger than total size of drive .... sometimes something else??? generic error???
+        // Return 6F02 : Wrong password entered
+        // Return 6F05 : No password entered, or password too short
+        // Return 6FFC : Security Settings changed; need powercycle to reload stuff
+
+        #region verify (Unlock Data Protection)
         [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "verify", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.U4)]
         private static extern int _verify(
@@ -24,26 +40,31 @@ namespace SwissbitSecureSDUtils
             [MarshalAs(UnmanagedType.LPStr)] string password,
             [MarshalAs(UnmanagedType.U4)] int passwordLength);
         [return: MarshalAs(UnmanagedType.U4)]
-        public static bool SecureSd_Entsperren(string CardName, string Passwort)
+        public static bool SecureSd_Unlock_Card(string CardName, string Passwort)
         {
             Console.WriteLine("Unlock Card: " + CardName);
             int res = _verify(CardName, Passwort, Passwort.Length);
-            // Return 0000 = OK
-            // Return 6F02 = Passwort falsch
-            // Return 6F05 = Kein Passwort angegeben oder Passwort zu kurz
-            Console.WriteLine("Result : " + res.ToString("X4"));
+            if (res != 0)
+            {
+                Console.WriteLine("ERROR: verify() returned " + res.ToString("X4"));
+            }
             return res == 0;
         }
         #endregion
 
-        #region lockCard (Karte sperren)
+        #region lockCard (Lock Data Protection)
         [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "lockCard", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.U4)]
         private static extern int _lockCard(
             [MarshalAs(UnmanagedType.LPStr)] string CardName);
-        public static bool SecureSd_Sperren(string CardName)
+        public static bool SecureSd_Lock_Card(string CardName)
         {
+            Console.WriteLine("Lock Card: " + CardName);
             int res = _lockCard(CardName);
+            if (res != 0)
+            {
+                Console.WriteLine("ERROR: lockCard() returned " + res.ToString("X4"));
+            }
             return res == 0;
         }
         #endregion
@@ -101,27 +122,29 @@ namespace SwissbitSecureSDUtils
             int LicenseMode, SystemState, RetryCounter, SoRetryCounter, ResetCounter, CdRomAddress, ExtSecurityFlags;
             int res = _getStatus(CardName, out LicenseMode, out SystemState, out RetryCounter, out SoRetryCounter, out ResetCounter, out CdRomAddress, out ExtSecurityFlags);
             Console.WriteLine("***** CardManagement.dll getStatus() returns: 0x" + res.ToString("X4"));
-            Console.WriteLine("License Mode            : 0x" + LicenseMode.ToString("X"));
-            Console.Write    ("System State            : 0x" + SystemState.ToString("X") + " = ");
+            Console.WriteLine("License Mode            : 0x" + LicenseMode.ToString("X")); // Raspberry Pi Edition = 0x40. What else is possible?
+            Console.Write("System State            : 0x" + SystemState.ToString("X") + " = ");
             switch (SystemState)
             {
-                case 0: Console.Write("Transparent Mode"); break;
-                case 1: Console.Write("Data Protection Unlocked"); break;
-                case 2: Console.Write("Data Protection Locked"); break;
-                default: Console.Write("Unknown"); break;
+                case 0: Console.WriteLine("Transparent Mode"); break;
+                case 1: Console.WriteLine("Data Protection Unlocked"); break;
+                case 2: Console.WriteLine("Data Protection Locked"); break;
+                default: Console.WriteLine("Unknown"); break;
             }
-            Console.WriteLine("");
             Console.WriteLine("Retry Counter           : " + RetryCounter);
             Console.WriteLine("SO Retry Counter        : " + SoRetryCounter);
             Console.WriteLine("Number of Resets        : " + ResetCounter);
-            Console.WriteLine("CD ROM Address          : 0x" + CdRomAddress.ToString("X")); // This is only in cardManagerCLI.exe, but not cardManager.exe
+            Console.WriteLine("CD_ROM address          : 0x" + CdRomAddress.ToString("X")); // This field is described in NetPolicyServer User Manual version 2.6 in CardManagerCLI.exe, but not shown in the current version of any EXE or DLL. It might be obsolete
             Console.WriteLine("Extended Security Flags : 0x" + ExtSecurityFlags.ToString("X"));
-            /* TODO: Extended Security Flags
+            /* TODO: Interpreation of Extended Security Flags
             ??	    Support Fast Wipe
             0x1?	Reset Requires SO PIN
             0x2?	Multiple Partition Protection
             0x10	Secure PIN Entry
             0x20	Login Status Survives Soft Reset
+            - All Settings except "Fast Wipe" checked, but "Reset Req. SO PIN" grayed out = 0x33
+            - All 5 Settings enabled = 0x32
+            - All Settings except "Reset Req. SO PIN" checked = 0x30
             */
             Console.WriteLine("");
             #endregion
@@ -130,7 +153,13 @@ namespace SwissbitSecureSDUtils
             int ExceptionUnknown1, ExceptionUnknown2, ExceptionUnknown3, ExceptionUnknown4, ExceptionUnknown5;
             res = _getStatusException(CardName, out ExceptionUnknown1, out ExceptionUnknown2, out ExceptionUnknown3, out ExceptionUnknown4, out ExceptionUnknown5);
             Console.WriteLine("***** CardManagement.dll getStatusException() returns: 0x" + res.ToString("X4"));
-            // TODO: What are these values???
+            // TODO: What are these values??? Somewhere should be partition1Offset
+            // NetPolicyServer User Manual version 2.6 shows 4 values
+            // - defaultCDRomAddress         (this is not part of the current EXE or DLL)
+            // - readExceptionAddress        (this is not part of the current EXE or DLL) 
+            // - partition1Offset (in hex)
+            // - partition1Offset (in dec)
+            // Assuming that partition1Offset is only 1 value returned by the DLL, then we would only have 3 values. What are the other 2?
             Console.WriteLine("ExceptionUnknown1       : 0x" + ExceptionUnknown1.ToString("X"));
             Console.WriteLine("ExceptionUnknown2       : 0x" + ExceptionUnknown2.ToString("X"));
             Console.WriteLine("ExceptionUnknown3       : 0x" + ExceptionUnknown3.ToString("X"));
@@ -158,6 +187,7 @@ namespace SwissbitSecureSDUtils
                 Console.Write(Convert.ToChar(baseFWVersion[i]));
             }
             // Note: The screenshots in the manual shows the examples "211028s9 X100" and "170614s8  110"
+            //       My PU-50n USB has "180912u9  106"
             Console.WriteLine(" " + Encoding.ASCII.GetString(BitConverter.GetBytes(baseFWPart2).ToArray()));
             Console.WriteLine("");
             #endregion
@@ -189,7 +219,13 @@ namespace SwissbitSecureSDUtils
             Marshal.Copy(unmanagedPointer, controlerId, 0, controlerIdSize);
             Marshal.FreeHGlobal(unmanagedPointer);
             Console.WriteLine("***** CardManagement.dll getControllerId() returns: 0x" + res.ToString("X4"));
-            Console.Write("Unique ID: "); // "getControllerId()" shows the "UniqueID" for USB PU-50n, while getCardId() shows something weird. Confusing!
+            // "getControllerId()" shows the "UniqueID" for USB PU-50n, while getCardId() shows something weird. Confusing!
+            // The "NetPolicyServer User Manual" writes:
+            //    Please note the last value in the output (“Controller ID”, Figure 12). This alphanumeric sequence
+            //    without any blank spaces is the Unique ID of the DataProtection device, which is needed for the Net
+            //    Policy database entry in the Net Policy server.
+            //    Note: It is not the value shown as the Unique Card ID!
+            Console.Write("Unique ID: ");
             for (int i = 0; i < controlerIdSize; i++)
             {
                 Console.Write(" " + controlerId[i].ToString("X2"));
@@ -202,7 +238,12 @@ namespace SwissbitSecureSDUtils
             // TODO: getBuildDateAndTime() => hartkodiert "2019/04/11 11:33:04" in CardManagement.dll
             // TODO: getOverallSize(?, ?)
             // TODO: getPartitionTable(?, ?)
-            // TODO: getProtectionProfiles(?, ?, ?, ?)
+            // TODO: getProtectionProfiles(?, ?, ?, ?).
+            //       Swissbit Help says:  <ProfileStr> is a , separated list in the form StartOfRange,Type,StartOfRange,Type StartOfRange is a hexadecimal value, Type: 0=PRIVATE_RW, 1=PUBLIC_RW, 2=PRIVATE_CDROM 3=PUBLIC_CDROM
+            //       In CardManagerCli.exe of the uSDCard (not USB) there are 3 more entries: 4=PRIVATE_RO, 5=PUBLIC_RO, 6=FLEXIBLE_RO
+            //       On my stick it says in CardManagerCli.exe:
+            //       0x00000000 PUBLIC_CDROM
+            //       0x00018000 PRIVATE_RW      <-- Why does this say "0x18000" ? My CD ROM partition is 46 MB, so shouldn't the PrivateRW start earlier? 
 
             #region getStatusNvram()
             int NvramAccessRights, NvramTotalNvramSize, NvramRandomAccessSectors, NvramCyclicAccessSectors, NextCyclicWrite;
@@ -309,68 +350,82 @@ namespace SwissbitSecureSDUtils
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Swissbit Secure USB Stick PU50-n");
+            Console.WriteLine("Swissbit Secure USB Stick PU-50n");
             Console.WriteLine("Access using FileTunnelInterface.dll (from TSE Maintenance Tool) and CardManagement.dll (from SDK)");
             Console.WriteLine("");
 
             // TODO: Auto Recognize or select
             const string DEVICE_NAME = "Swissbit Secure USB PU-50n DP 0";
-            const string DECIDE_DRIVE_LETTER = "G";
+            const string DECIDE_DRIVE_LETTER = "h";
 
             SecureSDUtils.SecureSd_DeviceInfo(DEVICE_NAME);
 
             // Test
-            //SecureSDUtils.SecureSd_Entsperren(DEVICE_NAME, "damdamdamdam");
-            //SecureSDUtils.SecureSd_Sperren(DEVICE_NAME);
-
-
-
-            // The FileTunnelInterface.dll is part of the TSE Maintenance Tool.
-            // If FileTunnelInterface.dll works on a TSE, then the TSE is considered "in an undefined state".
-            // But with a Secure SD, the FileTunnelInterface works.
-            // So, I guess both SecureSD and TSE are made out of the same "raw material",
-            // and the firmware and/or configuration was uploaded via the FileTunnelInterface (Vendor Command Interface).
-            // If a FileTunnelInterface.dll works, then either the firmware was not applied in the factory,
-            // or maybe the TSE can fall back into the raw state if the firmware failed to boot (TSE Panic).
-            // But that's just a theory. Let's just enjoy that FileTunnelInterface.dll works on a SecureSD,
-            // because now we can also fetch the LTM data! The LTM data has the same structure as described
-            // in the TSE Firmware Specification.
+            //SecureSDUtils.SecureSd_Unlock_Card(DEVICE_NAME, "test123");
+            //SecureSDUtils.SecureSd_Lock_Card(DEVICE_NAME);
 
             if (DECIDE_DRIVE_LETTER != "")
             {
+                // The FileTunnelInterface.dll is part of the TSE Maintenance Tool.
+                // If FileTunnelInterface.dll works on a TSE, then the TSE is considered "in an undefined state".
+                // But with a Secure SD, the FileTunnelInterface works.
+                // So, I guess both SecureSD and TSE are made out of the same "raw material",
+                // and the firmware and/or configuration was uploaded via the FileTunnelInterface (Vendor Command Interface).
+                // If a FileTunnelInterface.dll works, then either the firmware was not applied in the factory,
+                // or maybe the TSE can fall back into the raw state if the firmware failed to boot (TSE Panic).
+                // But that's just a theory. Let's just enjoy that FileTunnelInterface.dll works on a SecureSD,
+                // because now we can also fetch the LTM data! The LTM data has the same structure as described
+                // in the TSE Firmware Specification.
+                // Unfortunately, FileTunnelInterface.dll does only work for Drive Letters which
+                // are writeable (so no CD-ROM partition).
+
                 VendorCommandsInterface vci = new VendorCommandsInterface(DECIDE_DRIVE_LETTER);
 
                 #region vci_read_chip_id
                 Console.WriteLine("***** FileTunnelInterface.dll vci_read_chip_id():");
-                Console.WriteLine(vci.readChipID());
+                try
+                {
+                    Console.WriteLine(vci.readChipID());
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: " + ex.Message);
+                }
                 Console.WriteLine("");
                 #endregion
 
                 #region vci_read_extended_card_lifetime_information and its interpretation
                 Console.WriteLine("***** FileTunnelInterface.dll vci_read_extended_card_lifetime_information():");
-                byte[] array = vci.readLTMData();
-                MemoryStream stream = new MemoryStream();
-                stream.Write(array, 0, array.Length);
-                stream.Seek(0, SeekOrigin.Begin);
-                using (BinaryReaderBigEndian r = new BinaryReaderBigEndian(stream))
+                try
                 {
-                    // Selber Aufbau wie in TSE Firmwarebeschreibung angegeben
-                    Console.WriteLine("Proprietary 1 Manufacturer proprietary format: " + BitConverter.ToString(r.ReadBytes(26)).Replace("-", " ")); // Firmware-Dokumentation ist falsch. Länge ist 26, nicht 25.
-                    Console.WriteLine("Number of manufacturer marked defect blocks: " + r.ReadUInt16());
-                    Console.WriteLine("Number of initial spare blocks (worst interleave unit): " + r.ReadUInt16());
-                    Console.WriteLine("Number of initial spare blocks (sum over all interleave units): " + r.ReadUInt16());
-                    Console.WriteLine("Percentage of remaining spare blocks (worst interleave unit): " + r.ReadByte() + "%");
-                    Console.WriteLine("Percentage of remaining spare blocks (all interleave units): " + r.ReadByte() + "%");
-                    Console.WriteLine("Number of uncorrectable ECC errors (not including startup ECC errors): " + r.ReadUInt16());
-                    Console.WriteLine("Number of correctable ECC errors (not including startup ECC errors): " + r.ReadUInt32());
-                    Console.WriteLine("Lowest wear level class: " + r.ReadUInt16());
-                    Console.WriteLine("Highest wear level class: " + r.ReadUInt16());
-                    Console.WriteLine("Wear level threshold: " + r.ReadUInt16());
-                    Console.WriteLine("Total number of block erases: " + r.ReadUInt48());
-                    Console.WriteLine("Number of flash blocks, in units of 256 blocks: " + r.ReadUInt16());
-                    Console.WriteLine("Maximum flash block erase count target, in wear level class units: " + r.ReadUInt16());
-                    Console.WriteLine("Power on count: " + r.ReadUInt32());
-                    Console.WriteLine("Proprietary 2 Manufacturer proprietary format: " + BitConverter.ToString(r.ReadBytes(100)).Replace("-", " "));
+                    byte[] array = vci.readLTMData();
+                    MemoryStream stream = new MemoryStream();
+                    stream.Write(array, 0, array.Length);
+                    stream.Seek(0, SeekOrigin.Begin);
+                    using (BinaryReaderBigEndian r = new BinaryReaderBigEndian(stream))
+                    {
+                        // Selber Aufbau wie in TSE Firmwarebeschreibung angegeben
+                        Console.WriteLine("Proprietary 1 Manufacturer proprietary format: " + BitConverter.ToString(r.ReadBytes(26)).Replace("-", " ")); // Firmware-Dokumentation ist falsch. Länge ist 26, nicht 25.
+                        Console.WriteLine("Number of manufacturer marked defect blocks: " + r.ReadUInt16());
+                        Console.WriteLine("Number of initial spare blocks (worst interleave unit): " + r.ReadUInt16());
+                        Console.WriteLine("Number of initial spare blocks (sum over all interleave units): " + r.ReadUInt16());
+                        Console.WriteLine("Percentage of remaining spare blocks (worst interleave unit): " + r.ReadByte() + "%");
+                        Console.WriteLine("Percentage of remaining spare blocks (all interleave units): " + r.ReadByte() + "%");
+                        Console.WriteLine("Number of uncorrectable ECC errors (not including startup ECC errors): " + r.ReadUInt16());
+                        Console.WriteLine("Number of correctable ECC errors (not including startup ECC errors): " + r.ReadUInt32());
+                        Console.WriteLine("Lowest wear level class: " + r.ReadUInt16());
+                        Console.WriteLine("Highest wear level class: " + r.ReadUInt16());
+                        Console.WriteLine("Wear level threshold: " + r.ReadUInt16());
+                        Console.WriteLine("Total number of block erases: " + r.ReadUInt48());
+                        Console.WriteLine("Number of flash blocks, in units of 256 blocks: " + r.ReadUInt16());
+                        Console.WriteLine("Maximum flash block erase count target, in wear level class units: " + r.ReadUInt16());
+                        Console.WriteLine("Power on count: " + r.ReadUInt32());
+                        Console.WriteLine("Proprietary 2 Manufacturer proprietary format: " + BitConverter.ToString(r.ReadBytes(100)).Replace("-", " "));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: " + ex.Message);
                 }
                 Console.WriteLine("");
                 #endregion
@@ -378,7 +433,6 @@ namespace SwissbitSecureSDUtils
                 vci = null;
             }
         }
-
 
         class BinaryReaderBigEndian : BinaryReader
         {
@@ -455,8 +509,6 @@ namespace SwissbitSecureSDUtils
             }
 
         }
-
-
 
     }
 }
