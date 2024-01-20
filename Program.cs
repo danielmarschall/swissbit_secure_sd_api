@@ -194,8 +194,8 @@ namespace SwissbitSecureSDUtils
             int LicenseMode, SystemState, RetryCounter, SoRetryCounter, ResetCounter, CdRomAddress, ExtSecurityFlags;
             int res = _getStatus(CardName, out LicenseMode, out SystemState, out RetryCounter, out SoRetryCounter, out ResetCounter, out CdRomAddress, out ExtSecurityFlags);
             Console.WriteLine("***** CardManagement.dll getStatus() returns: 0x" + res.ToString("X4"));
-            Console.WriteLine("License Mode            : 0x" + LicenseMode.ToString("X")); // Raspberry Pi Edition = 0x40. What else is possible?
-            Console.Write("System State            : 0x" + SystemState.ToString("X") + " = ");
+            Console.WriteLine("License Mode            : 0x" + LicenseMode.ToString("X2")); // Raspberry Pi Edition = 0x40. What else is possible?
+            Console.Write("System State            : 0x" + SystemState.ToString("X2") + " = ");
             switch (SystemState)
             {
                 case 0: Console.WriteLine("Transparent Mode"); break;
@@ -207,7 +207,7 @@ namespace SwissbitSecureSDUtils
             Console.WriteLine("SO Retry Counter        : " + SoRetryCounter);
             Console.WriteLine("Number of Resets        : " + ResetCounter);
             Console.WriteLine("CD_ROM address          : 0x" + CdRomAddress.ToString("X")); // This field is described in NetPolicyServer User Manual version 2.6-2.9 for CardManagerCLI.exe, but not shown in the current version of any EXE or DLL. It might be obsolete
-            Console.WriteLine("Extended Security Flags : 0x" + ExtSecurityFlags.ToString("X"));
+            Console.WriteLine("Extended Security Flags : 0x" + ExtSecurityFlags.ToString("X2"));
             /* TODO: Interpreation of Extended Security Flags
             ??	    Support Fast Wipe
             0x1?	Reset Requires SO PIN
@@ -497,8 +497,195 @@ namespace SwissbitSecureSDUtils
                     stream.Seek(0, SeekOrigin.Begin);
                     using (BinaryReaderBigEndian r = new BinaryReaderBigEndian(stream))
                     {
-                        // Selber Aufbau wie in TSE Firmwarebeschreibung angegeben
-                        Console.WriteLine("Proprietary 1 Manufacturer proprietary format: " + BitConverter.ToString(r.ReadBytes(26)).Replace("-", " ")); // Firmware-Dokumentation ist falsch. Länge ist 26, nicht 25.
+                        #region Interpretation of Swissbit LTM Data (Version 2024-01-20)
+                        // The first 26 bytes are described in the TSE Firmware Specification as manufacturer proprietary format,
+                        // however, they are described as "SSR register" in various Swissbit Product Data Sheets (Google "SSR Register")
+                        {
+                            uint tmp = r.ReadUInt16(); // Data bus width (2) || Secured mode (1) || Reserved for security (7) || Reserved (6)
+                            {
+                                string stmp2;
+                                uint tmp2 = (tmp >> 14) & 0b11;
+                                if (tmp2 == 0x2) stmp2 = "4 bit width";
+                                else stmp2 = "Unknown";
+                                Console.WriteLine("Data bus width: " + stmp2 + " (" + tmp2 + ")");
+                            }
+                            {
+                                string stmp2;
+                                uint tmp2 = (tmp >> 13) & 0b1;
+                                if (tmp2 == 0x1) stmp2 = "Secured";
+                                else stmp2 = "Not secured";
+                                Console.WriteLine("Secured mode: " + stmp2 + " (" + tmp2 + ")");
+                            }
+                            {
+                                uint tmp2 = (tmp >> 6) & 0b1111111;
+                                Console.WriteLine("Reserved for security (7 bits): 0x" + tmp2.ToString("X2"));
+                            }
+                            {
+                                uint tmp2 = tmp & 0b111111;
+                                Console.WriteLine("Reserved (6 bits): 0x" + tmp2.ToString("X2"));
+                            }
+                        }
+                        {
+                            string stmp2;
+                            uint tmp2 = r.ReadUInt16();
+                            if (tmp2 == 0) stmp2 = "Regular SD";
+                            else if (tmp2 == 257) stmp2 = "USB"; // not documented
+                            else stmp2 = "Unknown";
+                            Console.WriteLine("SD Card Type: " + stmp2 + " (" + tmp2 + ")");
+                        }
+                        {
+                            Console.WriteLine("Size protected area: " + (r.ReadUInt32() / 1024 / 1024) + " MB");
+                        }
+                        {
+                            string stmp2;
+                            uint tmp2 = r.ReadUInt8();
+                            if (tmp2 == 3) stmp2 = "Class 6";
+                            else if (tmp2 == 4) stmp2 = "Class 10";
+                            else stmp2 = "Unknown";
+                            Console.WriteLine("Speed class: " + stmp2 + " (" + tmp2 + ")");
+                        }
+                        {
+                            string stmp2;
+                            uint tmp2 = r.ReadUInt8();
+                            if (tmp2 == 0) stmp2 = "SequentialWrite";
+                            else stmp2 = tmp2 + "MB/s";
+                            Console.WriteLine("Move performance: " + stmp2 + " (" + tmp2 + ")");
+                        }
+                        {
+                            uint tmp = r.ReadUInt8(); // Allocation unit size (4) || Reserved (4)
+                            {
+                                string stmp2;
+                                uint tmp2 = ((tmp >> 4) & 0b1111);
+                                if (tmp2 == 0) stmp2 = "8 KiB?"; // not documented (not 100% sure)
+                                else if (tmp2 == 1) stmp2 = "16 KiB"; // not documented
+                                else if (tmp2 == 2) stmp2 = "32 KiB"; // not documented
+                                else if (tmp2 == 3) stmp2 = "64 KiB"; // not documented
+                                else if (tmp2 == 4) stmp2 = "128 KiB"; // not documented
+                                else if (tmp2 == 5) stmp2 = "256 KiB"; // not documented
+                                else if (tmp2 == 6) stmp2 = "512 KiB"; // not documented
+                                else if (tmp2 == 7) stmp2 = "1 MiB";
+                                else if (tmp2 == 8) stmp2 = "2 MiB";
+                                else if (tmp2 == 9) stmp2 = "4 MiB";
+                                else if (tmp2 == 10) stmp2 = "8 MiB"; // not documented
+                                else if (tmp2 == 11) stmp2 = "16 MiB"; // not documented
+                                else if (tmp2 == 12) stmp2 = "32 MiB"; // not documented
+                                else if (tmp2 == 13) stmp2 = "64 MiB"; // not documented
+                                else if (tmp2 == 14) stmp2 = "128 MiB"; // not documented
+                                else if (tmp2 == 15) stmp2 = "256 MiB"; // not documented
+                                else stmp2 = "Unknown";
+                                Console.WriteLine("Allocation unit size: " + stmp2 + " (" + tmp2 + ")");
+                            }
+                            {
+                                uint tmp2 = tmp & 0b1111;
+                                Console.WriteLine("Reserved (4 bits): 0x" + tmp2.ToString("X1"));
+                            }
+                        }
+                        {
+                            Console.WriteLine("Erase unit size: " + r.ReadUInt16() + " AU");
+                        }
+                        {
+                            uint tmp = r.ReadUInt8(); // Erase unit timeout (6) || Erase unit offset (2)
+                            {
+                                Console.WriteLine("Erase unit timeout: " + ((tmp >> 2) & 0b111111) + " seconds");
+                            }
+                            {
+                                Console.WriteLine("Erase unit offset: " + (tmp & 0b11) + " seconds");
+                            }
+                        }
+                        {
+                            uint tmp = r.ReadUInt8(); // UHS mode Speed Grade (4) || Allocation unit size in UHS mode (4)
+                            {
+                                string stmp2;
+                                uint tmp2 = (tmp >> 4) & 0b1111;
+                                if (tmp2 == 0) stmp2 = "NoUHS";
+                                else if (tmp2 == 1) stmp2 = "10MB/s and above";
+                                else if (tmp2 == 3) stmp2 = "UHS Grade 3";
+                                else stmp2 = "Unknown";
+                                Console.WriteLine("UHS mode speed grade: " + stmp2 + " (" + tmp2 + ")");
+                            }
+                            {
+                                string stmp2;
+                                uint tmp2 = tmp & 0b1111;
+                                if (tmp2 == 0) stmp2 = "NoUHS";
+                                else if (tmp2 == 1) stmp2 = "16 KiB"; // not documented
+                                else if (tmp2 == 2) stmp2 = "32 KiB"; // not documented
+                                else if (tmp2 == 3) stmp2 = "64 KiB"; // not documented
+                                else if (tmp2 == 4) stmp2 = "128 KiB"; // not documented
+                                else if (tmp2 == 5) stmp2 = "256 KiB"; // not documented
+                                else if (tmp2 == 6) stmp2 = "512 KiB"; // not documented
+                                else if (tmp2 == 7) stmp2 = "1 MiB";
+                                else if (tmp2 == 8) stmp2 = "2 MiB";
+                                else if (tmp2 == 9) stmp2 = "4 MiB";
+                                else if (tmp2 == 10) stmp2 = "8 MiB"; // not documented
+                                else if (tmp2 == 11) stmp2 = "16 MiB"; // not documented
+                                else if (tmp2 == 12) stmp2 = "32 MiB"; // not documented
+                                else if (tmp2 == 13) stmp2 = "64 MiB"; // not documented
+                                else if (tmp2 == 14) stmp2 = "128 MiB"; // not documented
+                                else if (tmp2 == 15) stmp2 = "256 MiB"; // not documented
+                                else stmp2 = "Unknown";
+                                Console.WriteLine("Allocation unit size in UHS mode: " + stmp2 + " (" + tmp2 + ")");
+                            }
+                        }
+                        {
+                            Console.WriteLine("Video Speed Class: " + r.ReadUInt8()); // 30=VideoSpeedClass30
+                        }
+                        {
+                            uint tmp = r.ReadUInt16(); // Reserved (6) || AU size for Video Speed Class (10)
+                            {
+                                uint tmp2 = (tmp >> 10) & 0b111111;
+                                Console.WriteLine("Reserved (6 bits): 0x" + tmp2.ToString("X2"));
+                            }
+                            {
+                                // PS-66DP_data_sheet.pdf describes 0x8=8MiB, which is a bit weird, because AU size in UHS mode used 0xA=8MiB
+                                Console.WriteLine("Allocation unit size for Video Speed Class: " + (tmp & 0b1111111111) + " MiB");
+                            }
+                        }
+                        {
+                            uint tmp = r.ReadUInt32(); // Suspension Address (22) || Reserved (6) || Application Performance Class (4)
+                            {
+                                Console.WriteLine("Suspension Address: " + ((tmp >> 10) & 0b1111111111111111111111));
+                            }
+                            {
+                                uint tmp2 = (tmp >> 4) & 0b111111;
+                                Console.WriteLine("Reserved (6 bits): 0x" + tmp2.ToString("X2"));
+                            }
+                            {
+                                string stmp2;
+                                uint tmp2 = tmp & 0b1111;
+                                if (tmp2 == 1) stmp2 = "Class A1";
+                                else stmp2 = "Unknown";
+                                Console.WriteLine("Application Performance Class: " + stmp2 + " (" + tmp2 + ")");
+                            }
+                        }
+                        {
+                            Console.WriteLine("Performance Enhancement: " + r.ReadUInt8());
+                        }
+                        {
+                            uint tmp = r.ReadUInt16(); // Reserved (14) || Discard Support (1) || Full User Area Logical Erase Support (1)
+                            {
+                                uint tmp2 = (tmp >> 2) & 0b11111111111111;
+                                Console.WriteLine("Reserved (14 bit): 0x" + tmp2.ToString("X4"));
+                            }
+                            {
+                                string stmp2;
+                                uint tmp2 = (tmp >> 1) & 0b1;
+                                if (tmp2 == 0x1) stmp2 = "Supported";
+                                else stmp2 = "Not Supported";
+                                Console.WriteLine("Discard Support: " + stmp2 + " (" + tmp2 + ")");
+                            }
+                            {
+                                string stmp2;
+                                uint tmp2 = tmp & 0b1;
+                                if (tmp2 == 0x1) stmp2 = "Supported";
+                                else stmp2 = "Not Supported";
+                                Console.WriteLine("Fill User Area Logical Erase Support: " + stmp2 + " (" + tmp2 + ")");
+                            }
+                        }
+                        {
+                            Console.WriteLine("Data structure version identifier: " + r.ReadUInt8());
+                        }
+
+                        // These fields are taken from the TSE Firmware Specification:
                         Console.WriteLine("Number of manufacturer marked defect blocks: " + r.ReadUInt16());
                         Console.WriteLine("Number of initial spare blocks (worst interleave unit): " + r.ReadUInt16());
                         Console.WriteLine("Number of initial spare blocks (sum over all interleave units): " + r.ReadUInt16());
@@ -510,10 +697,28 @@ namespace SwissbitSecureSDUtils
                         Console.WriteLine("Highest wear level class: " + r.ReadUInt16());
                         Console.WriteLine("Wear level threshold: " + r.ReadUInt16());
                         Console.WriteLine("Total number of block erases: " + r.ReadUInt48());
-                        Console.WriteLine("Number of flash blocks, in units of 256 blocks: " + r.ReadUInt16());
-                        Console.WriteLine("Maximum flash block erase count target, in wear level class units: " + r.ReadUInt16());
+                        Console.WriteLine("Number of flash blocks, in units of 256 blocks: " + r.ReadUInt16()); // 8
+                        Console.WriteLine("Maximum flash block erase count target, in wear level class units: " + r.ReadUInt16()); // 23
                         Console.WriteLine("Power on count: " + r.ReadUInt32());
-                        Console.WriteLine("Proprietary 2 Manufacturer proprietary format: " + BitConverter.ToString(r.ReadBytes(100)).Replace("-", " "));
+
+                        // This following part is also described as manufacturer proprietary format in the TSE Firmware Specification.
+                        // The first 4 bytes of them are described in the product data sheets as firmware version 0xYYMMDDXX and last element of the SSR register.
+                        {
+                            uint tmp = r.ReadUInt32();
+                            uint fwYear = (tmp >> 24) & 0xFF;
+                            uint fwMonth = (tmp >> 16) & 0xFF;
+                            uint fwDay = (tmp >> 8) & 0xFF;
+                            uint fwUnknown = tmp & 0xFF;
+                            Console.WriteLine("Firmware Version: 0x" + tmp.ToString("X8") + " (20" + fwYear.ToString("X2") + "-" + fwMonth.ToString("X2") + "-" + fwDay.ToString("X2") + ", 0x" + fwUnknown.ToString("X2") + ")");
+                        }
+                        // The next 96 bytes are not described anywhere else (except as manufacturer proprietary format in the TSE specification)
+                        {
+                            Console.WriteLine("Manufacturer proprietary format:");
+                            Console.WriteLine(BitConverter.ToString(r.ReadBytes(32)).Replace("-", " "));
+                            Console.WriteLine(BitConverter.ToString(r.ReadBytes(32)).Replace("-", " "));
+                            Console.WriteLine(BitConverter.ToString(r.ReadBytes(32)).Replace("-", " "));
+                        }
+                        #endregion
                     }
                 }
                 catch (Exception ex)
@@ -565,6 +770,12 @@ namespace SwissbitSecureSDUtils
                 var data = base.ReadBytes(8);
                 Array.Reverse(data);
                 return BitConverter.ToInt64(data, 0);
+            }
+
+            public ushort ReadUInt8()
+            {
+                var data = base.ReadBytes(1);
+                return data[0];
             }
 
             public override UInt16 ReadUInt16()
