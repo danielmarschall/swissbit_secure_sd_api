@@ -697,8 +697,8 @@ namespace SwissbitSecureSDUtils
                         Console.WriteLine("Highest wear level class: " + r.ReadUInt16());
                         Console.WriteLine("Wear level threshold: " + r.ReadUInt16());
                         Console.WriteLine("Total number of block erases: " + r.ReadUInt48());
-                        Console.WriteLine("Number of flash blocks, in units of 256 blocks: " + r.ReadUInt16()); // 8
-                        Console.WriteLine("Maximum flash block erase count target, in wear level class units: " + r.ReadUInt16()); // 23
+                        Console.WriteLine("Number of flash blocks, in units of 256 blocks: " + r.ReadUInt16());
+                        Console.WriteLine("Maximum flash block erase count target, in wear level class units: " + r.ReadUInt16());
                         Console.WriteLine("Power on count: " + r.ReadUInt32());
 
                         // This following part is also described as manufacturer proprietary format in the TSE Firmware Specification.
