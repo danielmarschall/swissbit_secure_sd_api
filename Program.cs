@@ -208,16 +208,14 @@ namespace SwissbitSecureSDUtils
             Console.WriteLine("Number of Resets        : " + ResetCounter);
             Console.WriteLine("CD_ROM address          : 0x" + CdRomAddress.ToString("X")); // This field is described in NetPolicyServer User Manual version 2.6-2.9 for CardManagerCLI.exe, but not shown in the current version of any EXE or DLL. It might be obsolete
             Console.WriteLine("Extended Security Flags : 0x" + ExtSecurityFlags.ToString("X2"));
-            /* TODO: Interpreation of Extended Security Flags
-            ??	    Support Fast Wipe
-            0x1?	Reset Requires SO PIN
-            0x2?	Multiple Partition Protection
-            0x10	Secure PIN Entry
-            0x20	Login Status Survives Soft Reset
-            - All Settings except "Fast Wipe" checked, but "Reset Req. SO PIN" grayed out = 0x33
-            - All 5 Settings enabled = 0x32
-            - All Settings except "Reset Req. SO PIN" checked = 0x30
-            */
+            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x1) == 0 ? "x" : " ") + "] Support Fast Wipe (~0x1)");
+            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x2) != 0 ? "x" : " ") + "] Reset Requires SO PIN (0x2)");
+            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x4) != 0 ? "x" : " ") + "] Unknown (0x4)");
+            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x8) == 0 ? "x" : " ") + "] Multiple Partition Protection (~0x8)");
+            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x10) != 0 ? "x" : " ") + "] Secure PIN Entry (0x10)");
+            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x20) != 0 ? "x" : " ") + "] Login Status Survives Soft Reset (0x20)");
+            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x40) != 0 ? "x" : " ") + "] Unknown (0x40)");
+            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x80) != 0 ? "x" : " ") + "] Unknown (0x80)");
             Console.WriteLine("");
             #endregion
 
@@ -334,14 +332,6 @@ namespace SwissbitSecureSDUtils
             int NvramAccessRights, NvramTotalNvramSize, NvramRandomAccessSectors, NvramCyclicAccessSectors, NextCyclicWrite;
             res = _getStatusNvram(CardName, out NvramAccessRights, out NvramTotalNvramSize, out NvramRandomAccessSectors, out NvramCyclicAccessSectors, out NextCyclicWrite);
             Console.WriteLine("***** CardManagement.dll getStatusNvram() returns: 0x" + res.ToString("X4"));
-            // TODO: "Fuse persistently" might also change parts of "Access Rights". But I don't want to try it with my card!
-            // 0000ccrr    c=cyclic   r=random
-            // 1 = all read
-            // 2 = all write
-            // 4 = user read
-            // 8 = user write
-            // 10 = wrap (cyclic)
-            bool Wrap = (NvramAccessRights & 0x0000F) == 1;
             int RandomRights = NvramAccessRights & 0xFF;
             int CyclicRights = (NvramAccessRights >> 8) & 0xFF;
             Console.WriteLine("Access Rights:         0x" + NvramAccessRights.ToString("X8"));
@@ -351,11 +341,18 @@ namespace SwissbitSecureSDUtils
             Console.WriteLine("                       [" + ((CyclicRights & 0x4) != 0 ? "x" : " ") + "] User Read (0x4)");
             Console.WriteLine("                       [" + ((CyclicRights & 0x8) != 0 ? "x" : " ") + "] User Write (0x8)");
             Console.WriteLine("                       [" + ((CyclicRights & 0x10) != 0 ? "x" : " ") + "] Wrap around (0x10)");
+            Console.WriteLine("                       [" + ((CyclicRights & 0x20) != 0 ? "x" : " ") + "] Security Officer Read (0x20)");
+            Console.WriteLine("                       [" + ((CyclicRights & 0x40) != 0 ? "x" : " ") + "] Security Officer Write (0x40)");
+            Console.WriteLine("                       [" + ((CyclicRights & 0x80) != 0 ? "x" : " ") + "] Fused Persistently (0x80)"); // not 100% sure
             Console.WriteLine("   Random NVRAM:       0x" + RandomRights.ToString("X2"));
             Console.WriteLine("                       [" + ((RandomRights & 0x1) != 0 ? "x" : " ") + "] All Read (0x1)");
             Console.WriteLine("                       [" + ((RandomRights & 0x2) != 0 ? "x" : " ") + "] All Write (0x2)");
             Console.WriteLine("                       [" + ((RandomRights & 0x4) != 0 ? "x" : " ") + "] User Read (0x4)");
             Console.WriteLine("                       [" + ((RandomRights & 0x8) != 0 ? "x" : " ") + "] User Write (0x8)");
+            //Console.WriteLine("                       [" + ((RandomRights & 0x10) != 0 ? "x" : " ") + "] Not defined (0x10)");
+            Console.WriteLine("                       [" + ((RandomRights & 0x20) != 0 ? "x" : " ") + "] Security Officer Read (0x20)");
+            Console.WriteLine("                       [" + ((RandomRights & 0x40) != 0 ? "x" : " ") + "] Security Officer Write (0x40)");
+            Console.WriteLine("                       [" + ((RandomRights & 0x80) != 0 ? "x" : " ") + "] Fused Persistently (0x80)"); // not 100% sure
             Console.WriteLine("Total NVRAM Size:      0x" + NvramTotalNvramSize.ToString("X"));
             Console.WriteLine("Random Access Sectors: 0x" + NvramRandomAccessSectors.ToString("X"));
             Console.WriteLine("Cyclic Access Sectors: 0x" + NvramCyclicAccessSectors.ToString("X"));
