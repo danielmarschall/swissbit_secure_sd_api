@@ -20,7 +20,8 @@ namespace SwissbitSecureSDUtils
     //              ^^ ^^                                                       ^^ ^^                      ^^
     // Some commands like fetching Partition Table don't seem to work though. I didn't investigate that yet.
 
-    // This C# library can help you using the USD/uSD card by calling the DLL instead of the non-working CLI EXE.
+    // This C# library can help you using the USD/uSD device by calling the DLL instead of the non-working CLI EXE.
+    // I have also found a lot of undocumented things, e.g. how to parse the extended security flags and how to read the Life Time Management (LTM) data.
 
     internal class SecureSDUtils
     {
@@ -322,9 +323,9 @@ namespace SwissbitSecureSDUtils
             int ProtectionProfileUnknown1, ProtectionProfileUnknown2, ProtectionProfileUnknown3;
             res = _getProtectionProfiles(CardName, out ProtectionProfileUnknown1, out ProtectionProfileUnknown2, out ProtectionProfileUnknown3);
             Console.WriteLine("***** CardManagement.dll getProtectionProfiles() returns: 0x" + res.ToString("X4"));
-            Console.WriteLine("ProtectionProfileUnknown1:         0x" + ProtectionProfileUnknown1.ToString("X8")); // For me, outputs 0x2
-            Console.WriteLine("ProtectionProfileUnknown2:         0x" + ProtectionProfileUnknown2.ToString("X8")); // For me, outputs 0x3
-            Console.WriteLine("ProtectionProfileUnknown3:         0x" + ProtectionProfileUnknown3.ToString("X8")); // For me, leaves value unchanged (therefore it seems to be an input argument)
+            Console.WriteLine("Unknown1                : 0x" + ProtectionProfileUnknown1.ToString("X8")); // For me, outputs 0x2
+            Console.WriteLine("Unknown2                : 0x" + ProtectionProfileUnknown2.ToString("X8")); // For me, outputs 0x3
+            Console.WriteLine("Unknown3                : 0x" + ProtectionProfileUnknown3.ToString("X8")); // For me, leaves value unchanged (therefore it seems to be an input argument)
             Console.WriteLine("");
             #endregion
 
@@ -334,29 +335,29 @@ namespace SwissbitSecureSDUtils
             Console.WriteLine("***** CardManagement.dll getStatusNvram() returns: 0x" + res.ToString("X4"));
             int RandomRights = NvramAccessRights & 0xFF;
             int CyclicRights = (NvramAccessRights >> 8) & 0xFF;
-            Console.WriteLine("Access Rights:         0x" + NvramAccessRights.ToString("X8"));
-            Console.WriteLine("   Cyclic NVRAM:       0x" + CyclicRights.ToString("X2"));
-            Console.WriteLine("                       [" + ((CyclicRights & 0x1) != 0 ? "x" : " ") + "] All Read (0x1)");
-            Console.WriteLine("                       [" + ((CyclicRights & 0x2) != 0 ? "x" : " ") + "] All Write (0x2)");
-            Console.WriteLine("                       [" + ((CyclicRights & 0x4) != 0 ? "x" : " ") + "] User Read (0x4)");
-            Console.WriteLine("                       [" + ((CyclicRights & 0x8) != 0 ? "x" : " ") + "] User Write (0x8)");
-            Console.WriteLine("                       [" + ((CyclicRights & 0x10) != 0 ? "x" : " ") + "] Wrap around (0x10)");
-            Console.WriteLine("                       [" + ((CyclicRights & 0x20) != 0 ? "x" : " ") + "] Security Officer Read (0x20)");
-            Console.WriteLine("                       [" + ((CyclicRights & 0x40) != 0 ? "x" : " ") + "] Security Officer Write (0x40)");
-            Console.WriteLine("                       [" + ((CyclicRights & 0x80) != 0 ? "x" : " ") + "] Fused Persistently (0x80)"); // not 100% sure
-            Console.WriteLine("   Random NVRAM:       0x" + RandomRights.ToString("X2"));
-            Console.WriteLine("                       [" + ((RandomRights & 0x1) != 0 ? "x" : " ") + "] All Read (0x1)");
-            Console.WriteLine("                       [" + ((RandomRights & 0x2) != 0 ? "x" : " ") + "] All Write (0x2)");
-            Console.WriteLine("                       [" + ((RandomRights & 0x4) != 0 ? "x" : " ") + "] User Read (0x4)");
-            Console.WriteLine("                       [" + ((RandomRights & 0x8) != 0 ? "x" : " ") + "] User Write (0x8)");
-            //Console.WriteLine("                       [" + ((RandomRights & 0x10) != 0 ? "x" : " ") + "] Not defined (0x10)");
-            Console.WriteLine("                       [" + ((RandomRights & 0x20) != 0 ? "x" : " ") + "] Security Officer Read (0x20)");
-            Console.WriteLine("                       [" + ((RandomRights & 0x40) != 0 ? "x" : " ") + "] Security Officer Write (0x40)");
-            Console.WriteLine("                       [" + ((RandomRights & 0x80) != 0 ? "x" : " ") + "] Fused Persistently (0x80)"); // not 100% sure
-            Console.WriteLine("Total NVRAM Size:      0x" + NvramTotalNvramSize.ToString("X"));
-            Console.WriteLine("Random Access Sectors: 0x" + NvramRandomAccessSectors.ToString("X"));
-            Console.WriteLine("Cyclic Access Sectors: 0x" + NvramCyclicAccessSectors.ToString("X"));
-            Console.WriteLine("Next Cyclic Write:     0x" + NextCyclicWrite.ToString("X"));
+            Console.WriteLine("Access Rights           : 0x" + NvramAccessRights.ToString("X8"));
+            Console.WriteLine("     Cyclic NVRAM       : 0x" + CyclicRights.ToString("X2"));
+            Console.WriteLine("                          [" + ((CyclicRights & 0x1) != 0 ? "x" : " ") + "] All Read (0x1)");
+            Console.WriteLine("                          [" + ((CyclicRights & 0x2) != 0 ? "x" : " ") + "] All Write (0x2)");
+            Console.WriteLine("                          [" + ((CyclicRights & 0x4) != 0 ? "x" : " ") + "] User Read (0x4)");
+            Console.WriteLine("                          [" + ((CyclicRights & 0x8) != 0 ? "x" : " ") + "] User Write (0x8)");
+            Console.WriteLine("                          [" + ((CyclicRights & 0x10) != 0 ? "x" : " ") + "] Wrap around (0x10)");
+            Console.WriteLine("                          [" + ((CyclicRights & 0x20) != 0 ? "x" : " ") + "] Security Officer Read (0x20)");
+            Console.WriteLine("                          [" + ((CyclicRights & 0x40) != 0 ? "x" : " ") + "] Security Officer Write (0x40)");
+            Console.WriteLine("                          [" + ((CyclicRights & 0x80) != 0 ? "x" : " ") + "] Fused Persistently (0x80)"); // not 100% sure
+            Console.WriteLine("     Random NVRAM       : 0x" + RandomRights.ToString("X2"));
+            Console.WriteLine("                          [" + ((RandomRights & 0x1) != 0 ? "x" : " ") + "] All Read (0x1)");
+            Console.WriteLine("                          [" + ((RandomRights & 0x2) != 0 ? "x" : " ") + "] All Write (0x2)");
+            Console.WriteLine("                          [" + ((RandomRights & 0x4) != 0 ? "x" : " ") + "] User Read (0x4)");
+            Console.WriteLine("                          [" + ((RandomRights & 0x8) != 0 ? "x" : " ") + "] User Write (0x8)");
+            //Console.WriteLine("                          [" + ((RandomRights & 0x10) != 0 ? "x" : " ") + "] Not defined (0x10)");
+            Console.WriteLine("                          [" + ((RandomRights & 0x20) != 0 ? "x" : " ") + "] Security Officer Read (0x20)");
+            Console.WriteLine("                          [" + ((RandomRights & 0x40) != 0 ? "x" : " ") + "] Security Officer Write (0x40)");
+            Console.WriteLine("                          [" + ((RandomRights & 0x80) != 0 ? "x" : " ") + "] Fused Persistently (0x80)"); // not 100% sure
+            Console.WriteLine("Total NVRAM Size        : 0x" + NvramTotalNvramSize.ToString("X"));
+            Console.WriteLine("Random Access Sectors   : 0x" + NvramRandomAccessSectors.ToString("X"));
+            Console.WriteLine("Cyclic Access Sectors   : 0x" + NvramCyclicAccessSectors.ToString("X"));
+            Console.WriteLine("Next Cyclic Write       : 0x" + NextCyclicWrite.ToString("X"));
             Console.WriteLine("");
             #endregion
 
@@ -364,7 +365,7 @@ namespace SwissbitSecureSDUtils
             uint OverallSize;
             res = _getOverallSize(CardName, out OverallSize);
             Console.WriteLine("***** CardManagement.dll getOverallSize() returns: 0x" + res.ToString("X4"));
-            Console.WriteLine("Overal size             : 0x" + OverallSize.ToString("X") + " = " + OverallSize + " blocks = " + ((Int64)OverallSize * 512 / 1024 / 1024) + " MiB");
+            Console.WriteLine("Overall size            : 0x" + OverallSize.ToString("X") + " = " + OverallSize + " blocks = " + ((Int64)OverallSize * 512 / 1024 / 1024) + " MiB");
             Console.WriteLine("");
             #endregion
 
