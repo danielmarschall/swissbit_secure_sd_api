@@ -2,10 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection.Metadata.Ecma335;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Xml;
 
 namespace SwissbitSecureSDUtils
 {
@@ -152,17 +150,6 @@ namespace SwissbitSecureSDUtils
             int res = _getControllerId(deviceName, unmanagedPointer, ref controlerIdSize);
             Marshal.Copy(unmanagedPointer, controlerIdBytes, 0, controlerIdSize);
             Marshal.FreeHGlobal(unmanagedPointer);
-            // "getControllerId()" shows the "UniqueID" for USB PU-50n, while getCardId() shows something weird. Confusing!
-            // The "NetPolicyServer User Manual" writes:
-            //    Please note the last value in the output (“Controller ID”, Figure 12). This alphanumeric sequence
-            //    without any blank spaces is the Unique ID of the DataProtection device, which is needed for the Net
-            //    Policy database entry in the Net Policy server.
-            //    Note: It is not the value shown as the Unique Card ID!
-            // CardManager.exe of USB and CardManager of uSD both use getControllerId() to display the "Unique ID"
-            // field in the Device Status dialog. Therefore we can be sure that this is surely the Unique ID,
-            // and also identical to the Chip ID from the FTI.
-            // On the other hand, a screenshot in the Swissbit Raspberry Pi documentation shows
-            // that Controller ID can be all zeros. Weird?? Maybe just a development system?
             controllerId = "";
             for (int i = 0; i < controlerIdSize; i++)
             {
@@ -296,12 +283,28 @@ namespace SwissbitSecureSDUtils
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Swissbit Secure USB Stick PU-50n");
+            Console.WriteLine("Swissbit Secure USB Stick 'PU-50n DP' and Secure SD Card 'PS-45u DP'");
             Console.WriteLine("Access using FileTunnelInterface.dll (from TSE Maintenance Tool) and CardManagement.dll (from SDK)");
             Console.WriteLine("");
 
-            // TODO: Auto Recognize or receive from argc
-            const string deviceName = "Swissbit Secure USB PU-50n DP 0";
+            if (args.Length == 1 && (args[0] == "/?" || args[0] == "--help"))
+            {
+                Console.WriteLine("Syntax: SwissbitSecureSDUtils.exe 'Device Name'");
+                Console.WriteLine("If Device Name is omitted, then 'Swissbit Secure USB PU-50n DP 0' will be chosen.");
+                Console.WriteLine("");
+                return;
+            }
+
+            string deviceName;
+            if (args.Length == 1)
+            {
+                deviceName = args[0];
+            }
+            else
+            {
+                // TODO: Autorecognize somehow?
+                deviceName = "Swissbit Secure USB PU-50n DP 0";
+            }
 
             // Test
             //SecureSDUtils.SecureSd_Unlock_Card(deviceName, "test123");
@@ -328,7 +331,7 @@ namespace SwissbitSecureSDUtils
                             vci = null;
                             if (sChipId.ToLower().TrimStart('0').Equals(sUniqueId))
                             {
-                                Console.WriteLine("Found drive letter " + driveLetter.ToString().ToUpper() + ": to call FileTunnelInterface:");
+                                Console.WriteLine("Found drive letter " + driveLetter.ToString().ToUpper() + ": to call FileTunnelInterface!");
                                 Console.WriteLine("");
                                 VendorCommandsInterfaceDeviceStatus(driveLetter.ToString());
                                 foundSomething = true;
@@ -474,7 +477,7 @@ namespace SwissbitSecureSDUtils
             // CardManager.exe of USB and CardManager of uSD both use getControllerId() to display the "Unique ID"
             // field in the Device Status dialog. Therefore we can be sure that this is surely the Unique ID,
             // and also identical to the Chip ID from the FTI.
-            // On the other hand, a screenshot in the Swissbit Raspberry Pi documentation shows
+            // On the other hand, a screenshot in the Swissbit Raspberry Pi Secure Boot documentation shows
             // that Controller ID can be all zeros. Weird?? Maybe just a development system?
             Console.WriteLine("Unique ID               : " + controllerId);
             Console.WriteLine("");
@@ -484,7 +487,7 @@ namespace SwissbitSecureSDUtils
 
             #region getProtectionProfiles (Work in progress)
             // TODO: getProtectionProfiles(?, ?, ?, ?).
-            //       Swissbit CLI Help says:  <ProfileStr> is a , separated list in the form StartOfRange,Type,StartOfRange,Type StartOfRange is a hexadecimal value, Type: 0=PRIVATE_RW, 1=PUBLIC_RW, 2=PRIVATE_CDROM 3=PUBLIC_CDROM
+            //       CardManagerCLI.exe help says:  <ProfileStr> is a , separated list in the form StartOfRange,Type,StartOfRange,Type StartOfRange is a hexadecimal value, Type: 0=PRIVATE_RW, 1=PUBLIC_RW, 2=PRIVATE_CDROM 3=PUBLIC_CDROM
             //       In CardManagerCli.exe of the uSDCard (not USB) there are 3 more entries: 4=PRIVATE_RO, 5=PUBLIC_RO, 6=FLEXIBLE_RO
             //       On my stick it says in CardManagerCli.exe:
             //       0x00000000 PUBLIC_CDROM
