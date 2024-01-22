@@ -7,27 +7,38 @@ using System.Text;
 
 namespace SwissbitSecureSDUtils
 {
-    // The following commands have only been tested with the USB version of PU-50n, not with the PS-45u SD card
-
+    // ******************************************************************
     // There is a big Problem with CardManagerLite.exe and CardManagerCLI.exe
-    // For the USB PU-50n, CardManagement.dll cannot access "G:\". It can only access the name "Swissbit Secure USB PU-50n DP 0".
+    // For the USB Stick 'PU-50n DP', CardManagement.dll cannot access the device via drive letter (e.g. "G:\").
+    // It can only access the SmartCard name "Swissbit Secure USB PU-50n DP 0".
     // You can verify this by query "G:\" in CardManager.exe .
-    // The big problem is that CardManagerLite.exe and CardManagerCli.exe only accept "G:\", not names.
-    // Therefore, you cannot use the CLI tool for the USB stick! Not good!
+    // The big problem is that CardManagerLite.exe and CardManagerCli.exe only accept drive letters  (e.g. "G:"), not SmartCard names.
+    // Therefore, you CANNOT use the CLI tool for the USB Secure USB Stick! This is a showstopper, so you must use the GUI tool and cannot
+    // configure the secure USB stick via command line or programmatically. (Isn't this the purpose of a Software DEVELOPMENT Kit?)
+    // 
     // To fix this issue, patch CardManagerCLI.exe by disabling the syntax check for the "--mountpoint" argument:
     //     Search:  75 1F 0F BE 02 50 FF 15 D8 D2 40 00 8B 7D FC 83 C4 04 85 C0 74 0E 8B 47 0C 80 78 01 3A 74
     //     Replace: 90 90 0F BE 02 50 FF 15 D8 D2 40 00 8B 7D FC 83 C4 04 85 C0 90 90 8B 47 0C 80 78 01 3A EB
     //              ^^ ^^                                                       ^^ ^^                      ^^
     // Some commands like fetching Partition Table don't seem to work though. I didn't investigate that yet.
+    // ******************************************************************
 
-    // This C# library can help you using the USD/uSD device by calling the DLL instead of the non-working CLI EXE.
-    // I have also found a lot of undocumented things, e.g. how to parse the extended security flags and how to read the Life Time Management (LTM) data.
+    // ******************************************************************
+    // In addition, this C# library can help you using the USD/uSD device by calling the DLL instead of the non-working CLI EXE.
+    // I have also found a lot of undocumented things, e.g. how to interprete the extended security flags and how to read the Life Time Management (LTM) data.
+    // All these things shall be part of the documentation, but they are not. The documentation is insufficient,
+    // error codes are not documented, various options in the GUI are not described, and the worst of all:
+    // The Software DEVELOPMENT Kit does not allow that you develop using a programming language... It is just a collection of EXE, DLL, and PDF files...
+    // Note: This C# library has only been tested with the USB Stick (PU-50n DP), not with the uSD Card (PS-45u DP).
 
-    internal class CardManagement
+    // ******************************************************************
+
+    /**
+     * <summary>Calls methods of CardManagement.dll (part of the Swissbit Raspberry Pi Secure Boot "SDK")</summary>
+     */
+    class CardManagement
     {
-        // TODO: Implement more methods of CardManagement.dll
-
-        // Error Messages collected:
+        // Some Error Messages collected:
         // Return 0000 : OK
         // Return 9001 : Change Protection Profile (Partition): Sum of Partition sizes is larger than total size of drive .... sometimes something else??? generic error???
         // Return 6B00 : Happens at getPartitionTable if Firmware of DP Card is too old
@@ -35,51 +46,21 @@ namespace SwissbitSecureSDUtils
         // Return 6F05 : No password entered, or password too short
         // Return 6FFC : Security Settings changed; need powercycle to reload stuff
 
-        #region verify (Unlock Data Protection)
-        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "verify", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U4)]
-        private static extern int _verify(
-            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-            [MarshalAs(UnmanagedType.LPStr)] string password,
-            [MarshalAs(UnmanagedType.U4)] int passwordLength);
-        public static int verify(string deviceName, string password)
-        {
-            return _verify(deviceName, password, password.Length);
-        }
-        #endregion
+        // TODO: Implement activate(...)
 
-        #region lockCard (Lock Data Protection)
-        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "lockCard", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int lockCard(
-            [MarshalAs(UnmanagedType.LPStr)] string deviceName);
-        #endregion
+        // TODO: Implement activateSecure(...)
 
-        #region getStatus
-        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getStatus", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int getStatus(
-            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-            [MarshalAs(UnmanagedType.U4)] out int LicenseMode,
-            [MarshalAs(UnmanagedType.U4)] out int SystemState,
-            [MarshalAs(UnmanagedType.U4)] out int RetryCounter,
-            [MarshalAs(UnmanagedType.U4)] out int SoRetryCounter,
-            [MarshalAs(UnmanagedType.U4)] out int ResetCounter,
-            [MarshalAs(UnmanagedType.U4)] out int CdRomAddress,
-            [MarshalAs(UnmanagedType.U4)] out int ExtSecurityFlags);
-        #endregion
+        // TODO: Implement challengeFirmware(...)
 
-        #region getStatusException
-        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getStatusException", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int getStatusException(
-            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-            [MarshalAs(UnmanagedType.U4)] out int ExceptionUnknown1,
-            [MarshalAs(UnmanagedType.U4)] out int ExceptionUnknown2,
-            [MarshalAs(UnmanagedType.U4)] out int ExceptionUnknown3,
-            [MarshalAs(UnmanagedType.U4)] out int partition1Offset,
-            [MarshalAs(UnmanagedType.U4)] out int ExceptionUnknown4);
-        #endregion
+        // TODO: Implement changePassword(...)
+
+        // TODO: Implement checkAuthenticity(...)
+
+        // TODO: Implement clearProtectionProfiles(...)
+
+        // TODO: Implement configureNvram(...)
+
+        // TODO: Implement deactivate(...)
 
         #region getApplicationVersion
         [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getApplicationVersion", CallingConvention = CallingConvention.Cdecl)]
@@ -87,77 +68,6 @@ namespace SwissbitSecureSDUtils
         public static extern int getApplicationVersion(
             [MarshalAs(UnmanagedType.LPStr)] string deviceName,
             [MarshalAs(UnmanagedType.U4)] out int ApplicationVersion);
-        #endregion
-
-        #region getOverallSize
-        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getOverallSize", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int getOverallSize(
-            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-            [MarshalAs(UnmanagedType.U4)] out uint OverallSize);
-        #endregion
-
-        #region getStatusNvram
-        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getStatusNvram", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int getStatusNvram(
-            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-            [MarshalAs(UnmanagedType.U4)] out int AccessRights,
-            [MarshalAs(UnmanagedType.U4)] out int TotalNvRamSize,
-            [MarshalAs(UnmanagedType.U4)] out int RandomAccessSectors,
-            [MarshalAs(UnmanagedType.U4)] out int CyclicAccessSectors,
-            [MarshalAs(UnmanagedType.U4)] out int NextCyclicWrite);
-        #endregion
-
-        #region getCardId
-        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getCardId", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U4)]
-        private static extern int _getCardId(
-            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-            [MarshalAs(UnmanagedType.SysInt)] IntPtr cardid12bytes);
-        public static int getCardId(string deviceName, out string cardId)
-        {
-            int cardIdSize = 16;
-            var cardIdBytes = new byte[cardIdSize];
-            IntPtr unmanagedPointer = Marshal.AllocHGlobal(cardIdSize);
-            //Marshal.Copy(cardIdBytes, 0, unmanagedPointer, cardIdSize);
-            int res = _getCardId(deviceName, unmanagedPointer);
-            Marshal.Copy(unmanagedPointer, cardIdBytes, 0, cardIdSize);
-            Marshal.FreeHGlobal(unmanagedPointer);
-            cardId = "";
-            for (int i = 0; i < cardIdSize; i++)
-            {
-                cardId += " " + cardIdBytes[i].ToString("X2");
-            }
-            cardId = cardId.Trim();
-            return res;
-        }
-        #endregion
-
-        #region getControllerId
-        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getControllerId", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U4)]
-        private static extern int _getControllerId(
-            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-            [MarshalAs(UnmanagedType.SysInt)] IntPtr conrollerId,
-            [MarshalAs(UnmanagedType.U4)] ref int conrollerIdSize);
-        public static int getControllerId(string deviceName, out string controllerId)
-        {
-            int controlerIdSize = 99;
-            byte[] controlerIdBytes = new byte[controlerIdSize];
-            IntPtr unmanagedPointer = Marshal.AllocHGlobal(controlerIdSize);
-            //Marshal.Copy(controlerIdBytes, 0, unmanagedPointer, controlerIdSize);
-            int res = _getControllerId(deviceName, unmanagedPointer, ref controlerIdSize);
-            Marshal.Copy(unmanagedPointer, controlerIdBytes, 0, controlerIdSize);
-            Marshal.FreeHGlobal(unmanagedPointer);
-            controllerId = "";
-            for (int i = 0; i < controlerIdSize; i++)
-            {
-                controllerId += " " + controlerIdBytes[i].ToString("X2");
-            }
-            controllerId = controllerId.Trim();
-            return res;
-        }
         #endregion
 
         #region getBaseFWVersion
@@ -189,22 +99,6 @@ namespace SwissbitSecureSDUtils
         }
         #endregion
 
-        #region getProtectionProfiles
-        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getProtectionProfiles", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int getProtectionProfiles(
-            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-            [MarshalAs(UnmanagedType.U4)] out int ProtectionProfileUnknown1,
-            [MarshalAs(UnmanagedType.U4)] out int ProtectionProfileUnknown2,
-            [MarshalAs(UnmanagedType.U4)] out int ProtectionProfileUnknown3);
-        #endregion
-
-        #region getVersion
-        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getVersion", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int getVersion();
-        #endregion
-
         #region getBuildDateAndTime (only for 2019 USB/uSD DLL, not for 2022 uSD DLL)
         [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getBuildDateAndTime", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.SysInt)]
@@ -215,8 +109,172 @@ namespace SwissbitSecureSDUtils
         }
         #endregion
 
+        #region getCardId
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getCardId", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        private static extern int _getCardId(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+            [MarshalAs(UnmanagedType.SysInt)] IntPtr cardid12bytes);
+        public static int getCardId(string deviceName, out string cardId)
+        {
+            int cardIdSize = 16;
+            var cardIdBytes = new byte[cardIdSize];
+            IntPtr unmanagedPointer = Marshal.AllocHGlobal(cardIdSize);
+            //Marshal.Copy(cardIdBytes, 0, unmanagedPointer, cardIdSize);
+            int res = _getCardId(deviceName, unmanagedPointer);
+            Marshal.Copy(unmanagedPointer, cardIdBytes, 0, cardIdSize);
+            Marshal.FreeHGlobal(unmanagedPointer);
+            cardId = "";
+            for (int i = 0; i < cardIdSize; i++)
+            {
+                cardId += " " + cardIdBytes[i].ToString("X2");
+            }
+            cardId = cardId.Trim();
+            return res;
+        }
+        #endregion
+
+        #region getControllerId (Unique ID)
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getControllerId", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        private static extern int _getControllerId(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+            [MarshalAs(UnmanagedType.SysInt)] IntPtr conrollerId,
+            [MarshalAs(UnmanagedType.U4)] ref int conrollerIdSize);
+        public static int getControllerId(string deviceName, out string controllerId)
+        {
+            int controlerIdSize = 99;
+            byte[] controlerIdBytes = new byte[controlerIdSize];
+            IntPtr unmanagedPointer = Marshal.AllocHGlobal(controlerIdSize);
+            //Marshal.Copy(controlerIdBytes, 0, unmanagedPointer, controlerIdSize);
+            int res = _getControllerId(deviceName, unmanagedPointer, ref controlerIdSize);
+            Marshal.Copy(unmanagedPointer, controlerIdBytes, 0, controlerIdSize);
+            Marshal.FreeHGlobal(unmanagedPointer);
+            controllerId = "";
+            for (int i = 0; i < controlerIdSize; i++)
+            {
+                controllerId += " " + controlerIdBytes[i].ToString("X2");
+            }
+            controllerId = controllerId.Trim();
+            return res;
+        }
+        #endregion
+
+        // TODO: Implement getHashChallenge(...)
+
+        // TODO: Implement getLoginChallenge(...)
+
+        #region getOverallSize
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getOverallSize", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        public static extern int getOverallSize(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+            [MarshalAs(UnmanagedType.U4)] out uint OverallSize);
+        #endregion
+
+        // TODO: Implement getPartitionTable(...)
+
+        #region getProtectionProfiles
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getProtectionProfiles", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        public static extern int getProtectionProfiles(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+            [MarshalAs(UnmanagedType.U4)] out int ProtectionProfileUnknown1,
+            [MarshalAs(UnmanagedType.U4)] out int ProtectionProfileUnknown2,
+            [MarshalAs(UnmanagedType.U4)] out int ProtectionProfileUnknown3);
+        #endregion
+
+        #region getStatus
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getStatus", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        public static extern int getStatus(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+            [MarshalAs(UnmanagedType.U4)] out int LicenseMode,
+            [MarshalAs(UnmanagedType.U4)] out int SystemState,
+            [MarshalAs(UnmanagedType.U4)] out int RetryCounter,
+            [MarshalAs(UnmanagedType.U4)] out int SoRetryCounter,
+            [MarshalAs(UnmanagedType.U4)] out int ResetCounter,
+            [MarshalAs(UnmanagedType.U4)] out int CdRomAddress,
+            [MarshalAs(UnmanagedType.U4)] out int ExtSecurityFlags);
+        #endregion
+
+        #region getStatusException
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getStatusException", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        public static extern int getStatusException(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+            [MarshalAs(UnmanagedType.U4)] out int ExceptionUnknown1,
+            [MarshalAs(UnmanagedType.U4)] out int ExceptionUnknown2,
+            [MarshalAs(UnmanagedType.U4)] out int ExceptionUnknown3,
+            [MarshalAs(UnmanagedType.U4)] out int partition1Offset,
+            [MarshalAs(UnmanagedType.U4)] out int ExceptionUnknown4);
+        #endregion
+
+        #region getStatusNvram
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getStatusNvram", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        public static extern int getStatusNvram(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+            [MarshalAs(UnmanagedType.U4)] out int AccessRights,
+            [MarshalAs(UnmanagedType.U4)] out int TotalNvRamSize,
+            [MarshalAs(UnmanagedType.U4)] out int RandomAccessSectors,
+            [MarshalAs(UnmanagedType.U4)] out int CyclicAccessSectors,
+            [MarshalAs(UnmanagedType.U4)] out int NextCyclicWrite);
+        #endregion
+
+        #region getVersion
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getVersion", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        public static extern int getVersion();
+        #endregion
+
+        #region lockCard (Lock Data Protection)
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "lockCard", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        public static extern int lockCard(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName);
+        #endregion
+
+        // TODO: Implement readNvram(...)
+
+        // TODO: Implement reset(...)
+
+        // TODO: Implement resetAndFormat(...)
+
+        // TODO: Implement setAuthenticityCheckSecret(...)
+
+        // TODO: Implement setCdromAreaAndReadException(...)
+
+        // TODO: Implement setCdromAreaBackToDefault(...)
+
+        // TODO: Implement setExtendedSecurityFlags(...)
+
+        // TODO: setProtectionProfiles(...)
+
+        // TODO: Implement setSecureActivationKey(...)
+
+        // TODO: Implement unblockPassword(...)
+
+        #region verify (Unlock Data Protection)
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "verify", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        private static extern int _verify(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+            [MarshalAs(UnmanagedType.LPStr)] string password,
+            [MarshalAs(UnmanagedType.U4)] int passwordLength);
+        public static int verify(string deviceName, string password)
+        {
+            return _verify(deviceName, password, password.Length);
+        }
+        #endregion
+
+        // TODO: Implement writeNvram(...)
     }
-    internal class VendorCommandsInterface
+
+    /**
+     * <summary>Calls methods of FileTunnelInterface.dll (part of the Swissbit PU-50n TSE Maintenance Tool), which is also compatible with the PU-50n DP stick.</summary>
+     */
+    class VendorCommandsInterface
     {
         private IntPtr ci;
 
@@ -278,6 +336,9 @@ namespace SwissbitSecureSDUtils
         }
     }
 
+    /**
+     * <summary>Test program to receive various data about an attached device. It is mainly the same as the things that CardManagerCLI.exe outputs. Just working. And with LTM data.</summary>
+     */
     internal class Program
     {
 
