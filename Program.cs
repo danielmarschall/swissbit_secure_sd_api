@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection.Metadata.Ecma335;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Xml;
 
 namespace SwissbitSecureSDUtils
 {
@@ -38,10 +40,14 @@ namespace SwissbitSecureSDUtils
         #region verify (Unlock Data Protection)
         [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "verify", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int verify(
+        private static extern int _verify(
             [MarshalAs(UnmanagedType.LPStr)] string deviceName,
             [MarshalAs(UnmanagedType.LPStr)] string password,
             [MarshalAs(UnmanagedType.U4)] int passwordLength);
+        public static int verify(string deviceName, string password)
+        {
+            return _verify(deviceName, password, password.Length);
+        }
         #endregion
 
         #region lockCard (Lock Data Protection)
@@ -108,27 +114,92 @@ namespace SwissbitSecureSDUtils
         #region getCardId
         [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getCardId", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int getCardId(
+        private static extern int _getCardId(
             [MarshalAs(UnmanagedType.LPStr)] string deviceName,
             [MarshalAs(UnmanagedType.SysInt)] IntPtr cardid12bytes);
+        public static int getCardId(string deviceName, out string cardId)
+        {
+            int cardIdSize = 16;
+            var cardIdBytes = new byte[cardIdSize];
+            IntPtr unmanagedPointer = Marshal.AllocHGlobal(cardIdSize);
+            //Marshal.Copy(cardIdBytes, 0, unmanagedPointer, cardIdSize);
+            int res = _getCardId(deviceName, unmanagedPointer);
+            Marshal.Copy(unmanagedPointer, cardIdBytes, 0, cardIdSize);
+            Marshal.FreeHGlobal(unmanagedPointer);
+            cardId = "";
+            for (int i = 0; i < cardIdSize; i++)
+            {
+                cardId += " " + cardIdBytes[i].ToString("X2");
+            }
+            cardId = cardId.Trim();
+            return res;
+        }
         #endregion
 
         #region getControllerId
         [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getControllerId", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int getControllerId(
+        private static extern int _getControllerId(
             [MarshalAs(UnmanagedType.LPStr)] string deviceName,
             [MarshalAs(UnmanagedType.SysInt)] IntPtr conrollerId,
             [MarshalAs(UnmanagedType.U4)] ref int conrollerIdSize);
+        public static int getControllerId(string deviceName, out string controllerId)
+        {
+            int controlerIdSize = 99;
+            byte[] controlerIdBytes = new byte[controlerIdSize];
+            IntPtr unmanagedPointer = Marshal.AllocHGlobal(controlerIdSize);
+            //Marshal.Copy(controlerIdBytes, 0, unmanagedPointer, controlerIdSize);
+            int res = _getControllerId(deviceName, unmanagedPointer, ref controlerIdSize);
+            Marshal.Copy(unmanagedPointer, controlerIdBytes, 0, controlerIdSize);
+            Marshal.FreeHGlobal(unmanagedPointer);
+            // "getControllerId()" shows the "UniqueID" for USB PU-50n, while getCardId() shows something weird. Confusing!
+            // The "NetPolicyServer User Manual" writes:
+            //    Please note the last value in the output (“Controller ID”, Figure 12). This alphanumeric sequence
+            //    without any blank spaces is the Unique ID of the DataProtection device, which is needed for the Net
+            //    Policy database entry in the Net Policy server.
+            //    Note: It is not the value shown as the Unique Card ID!
+            // CardManager.exe of USB and CardManager of uSD both use getControllerId() to display the "Unique ID"
+            // field in the Device Status dialog. Therefore we can be sure that this is surely the Unique ID,
+            // and also identical to the Chip ID from the FTI.
+            // On the other hand, a screenshot in the Swissbit Raspberry Pi documentation shows
+            // that Controller ID can be all zeros. Weird?? Maybe just a development system?
+            controllerId = "";
+            for (int i = 0; i < controlerIdSize; i++)
+            {
+                controllerId += " " + controlerIdBytes[i].ToString("X2");
+            }
+            controllerId = controllerId.Trim();
+            return res;
+        }
         #endregion
 
         #region getBaseFWVersion
         [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getBaseFWVersion", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.U4)]
-        public static extern int getBaseFWVersion(
+        public static extern int _getBaseFWVersion(
             [MarshalAs(UnmanagedType.LPStr)] string deviceName,
             [MarshalAs(UnmanagedType.SysInt)] IntPtr firmware8bytes,
             [MarshalAs(UnmanagedType.U4)] ref int part2);
+        public static int getBaseFWVersion(string deviceName, out string baseFwVersion)
+        {
+            int baseFWPart2 = 0;
+            int baseFWVersionSize = 8;
+            byte[] baseFWVersion = new byte[baseFWVersionSize];
+            IntPtr unmanagedPointer = Marshal.AllocHGlobal(baseFWVersionSize);
+            //Marshal.Copy(baseFWVersion, 0, unmanagedPointer, baseFWVersionSize);
+            int res = _getBaseFWVersion(deviceName, unmanagedPointer, ref baseFWPart2);
+            Marshal.Copy(unmanagedPointer, baseFWVersion, 0, baseFWVersionSize);
+            Marshal.FreeHGlobal(unmanagedPointer);
+            baseFwVersion = "";
+            for (int i = 0; i < baseFWVersionSize; i++)
+            {
+                baseFwVersion += Convert.ToChar(baseFWVersion[i]);
+            }
+            // Note: The screenshots in the manual shows the examples "211028s9 X100" and "170614s8  110"
+            //       My USB device (PU-50n) DP has "180912u9  106"
+            baseFwVersion += " " + Encoding.ASCII.GetString(BitConverter.GetBytes(baseFWPart2).ToArray());
+            return res;
+        }
         #endregion
 
         #region getProtectionProfiles
@@ -150,7 +221,11 @@ namespace SwissbitSecureSDUtils
         #region getBuildDateAndTime (only for 2019 USB/uSD DLL, not for 2022 uSD DLL)
         [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getBuildDateAndTime", CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.SysInt)]
-        public static extern IntPtr getBuildDateAndTime();
+        private static extern IntPtr _getBuildDateAndTime();
+        public static string getBuildDateAndTime()
+        {
+            return Marshal.PtrToStringAnsi(_getBuildDateAndTime());
+        }
         #endregion
 
     }
@@ -238,19 +313,10 @@ namespace SwissbitSecureSDUtils
             {
                 Console.WriteLine("Try to find a writeable driveletter in order to call FileTunnelInterface...");
                 bool foundSomething = false;
-                int controlerIdSize = 99;
-                byte[] controlerId = new byte[controlerIdSize];
-                IntPtr unmanagedPointer = Marshal.AllocHGlobal(controlerIdSize);
-                //Marshal.Copy(controlerId, 0, unmanagedPointer, controlerIdSize);
-                if (CardManagement.getControllerId(deviceName, unmanagedPointer, ref controlerIdSize) == 0)
+                string sUniqueId;
+                if (CardManagement.getControllerId(deviceName, out sUniqueId) == 0)
                 {
-                    Marshal.Copy(unmanagedPointer, controlerId, 0, controlerIdSize);
-                    Marshal.FreeHGlobal(unmanagedPointer);
-                    string sUniqueId = "";
-                    for (int i = 0; i < controlerIdSize; i++)
-                    {
-                        sUniqueId += controlerId[i].ToString("x2");
-                    }
+                    sUniqueId = sUniqueId.Replace(" ", "").ToLower().Trim();
                     sUniqueId = sUniqueId.TrimStart('0'); // vci.readChipID does this automatically, so we need to do it too
 
                     for (char driveLetter = 'd'; driveLetter <= 'z'; driveLetter++)
@@ -262,7 +328,7 @@ namespace SwissbitSecureSDUtils
                             vci = null;
                             if (sChipId.ToLower().TrimStart('0').Equals(sUniqueId))
                             {
-                                Console.WriteLine("Found drive letter " + driveLetter.ToString() + ": to call FileTunnelInterface:");
+                                Console.WriteLine("Found drive letter " + driveLetter.ToString().ToUpper() + ": to call FileTunnelInterface:");
                                 Console.WriteLine("");
                                 VendorCommandsInterfaceDeviceStatus(driveLetter.ToString());
                                 foundSomething = true;
@@ -285,7 +351,7 @@ namespace SwissbitSecureSDUtils
         private static bool SecureSd_Unlock_Card(string deviceName, string password)
         {
             Console.WriteLine("Unlock Card: " + deviceName);
-            int res = CardManagement.verify(deviceName, password, password.Length);
+            int res = CardManagement.verify(deviceName, password);
             if (res != 0)
             {
                 Console.WriteLine("ERROR: verify() returned " + res.ToString("X4"));
@@ -311,7 +377,7 @@ namespace SwissbitSecureSDUtils
             string dllVersionString = "CardManagement.dll version " + ((int)Math.Floor((decimal)dllVersion / 0x100)).ToString("X") + "." + (dllVersion % 0x100).ToString("X");
             try
             {
-                string s = Marshal.PtrToStringAnsi(CardManagement.getBuildDateAndTime());
+                string s = CardManagement.getBuildDateAndTime();
                 dllVersionString += " built on " + s;
             }
             catch (Exception) { }
@@ -380,52 +446,24 @@ namespace SwissbitSecureSDUtils
             #endregion
 
             #region getBaseFWVersion
-            int baseFWPart2 = 0;
-            int baseFWVersionSize = 8;
-            byte[] baseFWVersion = new byte[baseFWVersionSize];
-            IntPtr unmanagedPointer = Marshal.AllocHGlobal(baseFWVersionSize);
-            //Marshal.Copy(baseFWVersion, 0, unmanagedPointer, baseFWVersionSize);
-            res = CardManagement.getBaseFWVersion(deviceName, unmanagedPointer, ref baseFWPart2);
-            Marshal.Copy(unmanagedPointer, baseFWVersion, 0, baseFWVersionSize);
-            Marshal.FreeHGlobal(unmanagedPointer);
+            string baseFwVersion = "";
+            res = CardManagement.getBaseFWVersion(deviceName, out baseFwVersion);
             Console.WriteLine("***** CardManagement.dll getBaseFWVersion() returns: 0x" + res.ToString("X4"));
-            Console.Write("Base Firmware Version: ");
-            for (int i = 0; i < baseFWVersionSize; i++)
-            {
-                Console.Write(Convert.ToChar(baseFWVersion[i]));
-            }
-            // Note: The screenshots in the manual shows the examples "211028s9 X100" and "170614s8  110"
-            //       My USB device (PU-50n) DP has "180912u9  106"
-            Console.WriteLine(" " + Encoding.ASCII.GetString(BitConverter.GetBytes(baseFWPart2).ToArray()));
+            Console.WriteLine("Base Firmware Version   : " + baseFwVersion);
             Console.WriteLine("");
             #endregion
 
             #region getCardId
-            int cardIdSize = 16;
-            var cardId = new byte[cardIdSize];
-            unmanagedPointer = Marshal.AllocHGlobal(cardIdSize);
-            //Marshal.Copy(cardId, 0, unmanagedPointer, cardIdSize);
-            res = CardManagement.getCardId(deviceName, unmanagedPointer);
-            Marshal.Copy(unmanagedPointer, cardId, 0, cardIdSize);
-            Marshal.FreeHGlobal(unmanagedPointer);
+            string cardId = "";
+            res = CardManagement.getCardId(deviceName, out cardId);
             Console.WriteLine("***** CardManagement.dll getCardId() returns: 0x" + res.ToString("X4"));
-            Console.Write("Card ID: ");
-            for (int i = 0; i < cardIdSize; i++)
-            {
-                Console.Write(" " + cardId[i].ToString("X2"));
-            }
-            Console.WriteLine("");
+            Console.WriteLine("Card ID                 : " + cardId);
             Console.WriteLine("");
             #endregion
 
             #region getControllerId (Unique ID)
-            int controlerIdSize = 99;
-            byte[] controlerId = new byte[controlerIdSize];
-            unmanagedPointer = Marshal.AllocHGlobal(controlerIdSize);
-            //Marshal.Copy(controlerId, 0, unmanagedPointer, controlerIdSize);
-            res = CardManagement.getControllerId(deviceName, unmanagedPointer, ref controlerIdSize);
-            Marshal.Copy(unmanagedPointer, controlerId, 0, controlerIdSize);
-            Marshal.FreeHGlobal(unmanagedPointer);
+            string controllerId = "";
+            res = CardManagement.getControllerId(deviceName, out controllerId);
             Console.WriteLine("***** CardManagement.dll getControllerId() returns: 0x" + res.ToString("X4"));
             // "getControllerId()" shows the "UniqueID" for USB PU-50n, while getCardId() shows something weird. Confusing!
             // The "NetPolicyServer User Manual" writes:
@@ -438,12 +476,7 @@ namespace SwissbitSecureSDUtils
             // and also identical to the Chip ID from the FTI.
             // On the other hand, a screenshot in the Swissbit Raspberry Pi documentation shows
             // that Controller ID can be all zeros. Weird?? Maybe just a development system?
-            Console.Write("Unique ID: ");
-            for (int i = 0; i < controlerIdSize; i++)
-            {
-                Console.Write(" " + controlerId[i].ToString("X2"));
-            }
-            Console.WriteLine("");
+            Console.WriteLine("Unique ID               : " + controllerId);
             Console.WriteLine("");
             #endregion
 
