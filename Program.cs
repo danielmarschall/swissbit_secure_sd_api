@@ -813,4 +813,31 @@ namespace SwissbitSecureSDUtils
         }
 
     }
+
+    // Technical foot note / interesting things:
+    //
+    // How does CardManagement.dll communicate with the hardware?
+    // - There is a file system access to "Swissbit Secure USB PU-50n DP 0\__communicationFile" of the current working directory. This fails because such a file does not exist.
+    //   If you create such a file, it gets deleted. If you create such a file and make it readonly, nothing happens. CardManagement.dll does not seem to be disturbed by that.
+    //   (Probably __communicationFile is a communication method for the PS-45u SD card solution?)
+    // - After the failed __communicationFile attempt, the SmartCard API (WinSCard.dll) is called to transmit data.
+    //   For the PU-50n stick, this is the real communication (if you let it fail, then the communication fails).
+    //   Probably, this SmartCard API only exists for the USB stick, not the SD card.
+    //
+    // How does the FileTunnelInterface.dll (from the TSE Maintenance Tool) communicate to the PU-50n (requires writeable drive letter though)?
+    // - It is neither SmartCard API, nor a file called __communicationFile!
+    // - ProcessMonitor shows: There are ONLY calls of CreateFile("H:"), ReadFile("H:"), WriteFile("H:") and CloseFile("H:")
+    //   Isn't this risky if FileTunnelInterface.dll would try to write to a regular drive?
+    //   I noticed: There are a LOT of Read-Accesses to offsets 0 (sector 0), 1024 (sector 2), 1536 (sector 3) before any WriteFile is called at all.
+    //   Theory: The read accesses are interpreted by a Swissbit device like a "morse code" and if the device reacts accordingly, then FileTunnelInterface.dll knows that it can now start WriteFile(),
+    //   and the device will most likely interprete these WriteFile() accesses as commands (like the TSE-IO.bin for the TSE)
+    // - Wow... there are a lot of different "interfaces" to communicate with devices over the file system...
+    // - Although FTI is a super tiny file, I could not manage to analyze it.
+    //
+    // How does WormApi.dll communicate with the TSE?
+    // - Via the file TSE-IO.bin (to a fixed sector). It is documented in the firmware specification.
+    //
+    // What I don't know yet (TODO):
+    // - How is the communication with the PS-45u card working? Also via Smartcard API? Or via __communicationFile?
+
 }
