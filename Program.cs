@@ -30,7 +30,6 @@ namespace SwissbitSecureSDUtils
     // error codes are not documented, various options in the GUI are not described, and the worst of all:
     // The Software DEVELOPMENT Kit does not allow that you develop using a programming language... It is just a collection of EXE, DLL, and PDF files...
     // Note: This C# library has only been tested with the USB Stick (PU-50n DP), not with the uSD Card (PS-45u DP).
-
     // ******************************************************************
 
     /**
@@ -41,7 +40,7 @@ namespace SwissbitSecureSDUtils
         // Some Error Messages collected:
         // Return 0000 : OK
         // Return 9001 : Change Protection Profile (Partition): Sum of Partition sizes is larger than total size of drive .... sometimes something else??? generic error???
-        // Return 6B00 : Happens at getPartitionTable if Firmware of DP Card is too old
+        // Return 6B00 : Happens at getPartitionTable if Firmware of Card is too old
         // Return 6F02 : Wrong password entered
         // Return 6F05 : No password entered, or password too short
         // Return 6FFC : Security Settings changed; need powercycle to reload stuff
@@ -93,7 +92,7 @@ namespace SwissbitSecureSDUtils
                 baseFwVersion += Convert.ToChar(baseFWVersion[i]);
             }
             // Note: The screenshots in the manual shows the examples "211028s9 X100" and "170614s8  110"
-            //       My USB device (PU-50n) DP has "180912u9  106"
+            //       My USB device (PU-50n DP) has "180912u9  106"
             baseFwVersion += " " + Encoding.ASCII.GetString(BitConverter.GetBytes(baseFWPart2).ToArray());
             return res;
         }
@@ -345,6 +344,7 @@ namespace SwissbitSecureSDUtils
         static void Main(string[] args)
         {
             Console.WriteLine("Swissbit Secure USB Stick 'PU-50n DP' and Secure SD Card 'PS-45u DP'");
+            Console.WriteLine("(probably also compatible with SE and PE security products)");
             Console.WriteLine("Access using FileTunnelInterface.dll (from TSE Maintenance Tool) and CardManagement.dll (from SDK)");
             Console.WriteLine("");
 
@@ -492,7 +492,7 @@ namespace SwissbitSecureSDUtils
             // - partition1Offset (in hex)
             // - partition1Offset (in dec)
             // Assuming that partition1Offset is only 1 value returned by the DLL, then we would only have 3 values. What are the other 2?
-            // RevEng CLI shows that DLL argument 5 is the partition1Offset. Arguments 2, 3, 4, 6 are unknown yet.
+            // In CLI, argument 5 is shown as partition1Offset. Arguments 2, 3, 4, 6 are unknown yet.
             Console.WriteLine("ExceptionUnknown1       : 0x" + ExceptionUnknown1.ToString("X"));
             Console.WriteLine("ExceptionUnknown2       : 0x" + ExceptionUnknown2.ToString("X"));
             Console.WriteLine("ExceptionUnknown3       : 0x" + ExceptionUnknown3.ToString("X"));
@@ -505,7 +505,7 @@ namespace SwissbitSecureSDUtils
             int ApplicationVersion;
             res = CardManagement.getApplicationVersion(deviceName, out ApplicationVersion);
             Console.WriteLine("***** CardManagement.dll getApplicationVersion() returns: 0x" + res.ToString("X4"));
-            Console.WriteLine("Application Version     : " + ApplicationVersion.ToString("x")); // RevEng: This seems to be called "CFE version". Also funny typos: "Yor CFE version is" and "You must be loged in to read the partition table".
+            Console.WriteLine("Application Version     : " + ApplicationVersion.ToString("x")); // In the binary it can be seen that it also seems to be called "CFE version". Also funny typos: "Yor CFE version is" and "You must be loged in to read the partition table".
             Console.WriteLine("");
             #endregion
 
@@ -611,7 +611,8 @@ namespace SwissbitSecureSDUtils
             // If FileTunnelInterface.dll works on a TSE, then the TSE is considered "in an undefined state".
             // But with a Secure SD, the FileTunnelInterface works.
             // So, I guess both SecureSD and TSE are made out of the same "raw material",
-            // and the firmware and/or configuration was uploaded via the FileTunnelInterface (Vendor Command Interface).
+            // and the own differences are crypto core yes/no (DP=no, SE/PE/TSE=yes), the firmware, and possible configuration/license.
+            // The firmware and/or configuration is probably uploaded via the FileTunnelInterface (Vendor Command Interface).
             // If FileTunnelInterface.dll works, then either the firmware was not applied in the factory,
             // or maybe the TSE can fall back into the raw state if the firmware failed to boot (TSE Panic).
             // But that's just a theory. Let's just enjoy that FileTunnelInterface.dll works on a SecureSD,
