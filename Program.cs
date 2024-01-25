@@ -95,7 +95,7 @@ namespace SwissbitSecureSDUtils
                 baseFwVersion += Convert.ToChar(baseFWVersion[i]);
             }
             // Note: The screenshots in the manual shows the examples "211028s9 X100" and "170614s8  110"
-            //       My USB device (PU-50n DP) has "180912u9  106"
+            //       My USB device (PU-50n DP) has "180912u9  106" but showns in the Swissbit Device Manager as "180912 1.06"
             baseFwVersion += " " + Encoding.ASCII.GetString(BitConverter.GetBytes(baseFWPart2).ToArray());
             return res;
         }
@@ -376,6 +376,8 @@ namespace SwissbitSecureSDUtils
             return Encoding.ASCII.GetString(array).TrimEnd('\0');
         }
     }
+
+    // TODO: Implement libsbltm.dll (from Device Manager LTM SDK)
 
     /**
      * <summary>Test program to receive various data about an attached device. It is mainly the same as the things that CardManagerCLI.exe outputs. Just working. And with LTM data.</summary>
@@ -1112,7 +1114,13 @@ namespace SwissbitSecureSDUtils
     // How does WormApi.dll communicate with the TSE?
     // - Via the file TSE-IO.bin (to a fixed sector). It is documented in the firmware specification.
     //
+    // How does Swissbit Device Manager and libsbltm.dll communicate with PU-50n DP?
+    // - First via the File Tunnel protocol to \Device\Harddrisk3\DR4\
+    // - Then by writing to a non-existant file "G:\sb.vc"
+    // - No Data Protection may be enabled. A PU-50n TSE cannot be detected either.
+    //
     // What I don't know yet (TODO):
     // - How is the communication with the PS-45u card working? Also via Smartcard API? Or via __communicationFile?
+    // - Where does the Device Manager get data like Temperature, Modell-ID, etc.? Does not seem to be in the unknown LTM data?
 
 }
