@@ -39,9 +39,12 @@ namespace SwissbitSecureSDUtils
     {
         // Some Error Messages collected:
         // Return 0000 : OK
+        // Return 0008 : Generic read error, e.g. "Failed SCardTransmit"  (happens for some reason when you save 259+ bytes to NVRAM and then try to read it)
+        // Return 3790 : Happens when you save 257 bytes to NVRAM and then try to read it
+        // Return 3131 : Happens when you save 258 bytes to NVRAM and then try to read it
         // Return 9001 : Change Protection Profile (Partition): Sum of Partition sizes is larger than total size of drive .... sometimes something else??? generic error???
         // Return 6B00 : Happens at getPartitionTable if Firmware of Card is too old
-        // Return 6F02 : Wrong password entered
+        // Return 6F02 : Wrong password entered or access denied
         // Return 6F05 : No password entered, or password too short
         // Return 6FFC : Security Settings changed; need powercycle to reload stuff
 
@@ -142,17 +145,17 @@ namespace SwissbitSecureSDUtils
             [MarshalAs(UnmanagedType.U4)] ref int conrollerIdSize);
         public static int getControllerId(string deviceName, out string controllerId)
         {
-            int controlerIdSize = 99;
-            byte[] controlerIdBytes = new byte[controlerIdSize];
-            IntPtr unmanagedPointer = Marshal.AllocHGlobal(controlerIdSize);
-            //Marshal.Copy(controlerIdBytes, 0, unmanagedPointer, controlerIdSize);
-            int res = _getControllerId(deviceName, unmanagedPointer, ref controlerIdSize);
-            Marshal.Copy(unmanagedPointer, controlerIdBytes, 0, controlerIdSize);
+            int controllerIdSize = 99;
+            byte[] controllerIdBytes = new byte[controllerIdSize];
+            IntPtr unmanagedPointer = Marshal.AllocHGlobal(controllerIdSize);
+            //Marshal.Copy(controllerIdBytes, 0, unmanagedPointer, controllerIdSize);
+            int res = _getControllerId(deviceName, unmanagedPointer, ref controllerIdSize);
+            Marshal.Copy(unmanagedPointer, controllerIdBytes, 0, controllerIdSize);
             Marshal.FreeHGlobal(unmanagedPointer);
             controllerId = "";
-            for (int i = 0; i < controlerIdSize; i++)
+            for (int i = 0; i < controllerIdSize; i++)
             {
-                controllerId += " " + controlerIdBytes[i].ToString("X2");
+                controllerId += " " + controllerIdBytes[i].ToString("X2");
             }
             controllerId = controllerId.Trim();
             return res;
@@ -171,7 +174,13 @@ namespace SwissbitSecureSDUtils
             [MarshalAs(UnmanagedType.U4)] out uint OverallSize);
         #endregion
 
-        // TODO: Implement getPartitionTable(...)
+        #region getPartitionTable
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getPartitionTable", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        public static extern int getPartitionTable(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+            [MarshalAs(UnmanagedType.U4)] out int PartitionTableUnknown1);
+        #endregion
 
         #region getProtectionProfiles
         [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getProtectionProfiles", CallingConvention = CallingConvention.Cdecl)]
@@ -234,7 +243,40 @@ namespace SwissbitSecureSDUtils
             [MarshalAs(UnmanagedType.LPStr)] string deviceName);
         #endregion
 
-        // TODO: Implement readNvram(...)
+        #region readNvram
+        [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "readNvram", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.U4)]
+        private static extern int _readNvram(
+            [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+            [MarshalAs(UnmanagedType.SysInt)] IntPtr value,
+            [MarshalAs(UnmanagedType.U4)] ref int valueLength,
+            [MarshalAs(UnmanagedType.Bool)] bool cyclic,
+            [MarshalAs(UnmanagedType.U4)] int sectorNumber
+            );
+        public static int readNvram(string deviceName, bool cyclic, int sectorNumber, out byte[] output)
+        {
+            int outputSize = 2000;
+            byte[] outputBytes = new byte[outputSize];
+            IntPtr unmanagedPointer = Marshal.AllocHGlobal(outputSize);
+            //Marshal.Copy(controllerIdBytes, 0, unmanagedPointer, outputSize);
+            int res = _readNvram(deviceName, unmanagedPointer, ref outputSize, cyclic, sectorNumber);
+            Marshal.Copy(unmanagedPointer, outputBytes, 0, outputSize);
+            Marshal.FreeHGlobal(unmanagedPointer);
+            if (res != 0)
+            {
+                output = null;
+            }
+            else
+            {
+                output = new byte[outputSize];
+                for (int i = 0; i < outputSize; i++)
+                {
+                    output[i] = outputBytes[i];
+                }
+            }
+            return res;
+        }
+        #endregion
 
         // TODO: Implement reset(...)
 
@@ -248,7 +290,7 @@ namespace SwissbitSecureSDUtils
 
         // TODO: Implement setExtendedSecurityFlags(...)
 
-        // TODO: setProtectionProfiles(...)
+        // TODO: Implement setProtectionProfiles(...)
 
         // TODO: Implement setSecureActivationKey(...)
 
@@ -434,7 +476,7 @@ namespace SwissbitSecureSDUtils
             return res == 0;
         }
 
-        private static bool SecureSd_DeviceInfo(string deviceName)
+        private static void SecureSd_DeviceInfo(string deviceName)
         {
             #region DLL Version
             int dllVersion = CardManagement.getVersion();
@@ -453,31 +495,35 @@ namespace SwissbitSecureSDUtils
             int LicenseMode, SystemState, RetryCounter, SoRetryCounter, ResetCounter, CdRomAddress, ExtSecurityFlags;
             int res = CardManagement.getStatus(deviceName, out LicenseMode, out SystemState, out RetryCounter, out SoRetryCounter, out ResetCounter, out CdRomAddress, out ExtSecurityFlags);
             Console.WriteLine("***** CardManagement.dll getStatus() returns: 0x" + res.ToString("X4"));
-            // Raspberry Pi Edition = 0x40. What else is possible?
-            // CardManager.exe : If License Mode is equal to 0x20, then "Extended Security Flags" are not shown in the "Device Status" dialog.
-            Console.WriteLine("License Mode            : 0x" + LicenseMode.ToString("X2"));
-            if (LicenseMode == 0x20) Console.WriteLine("                          [Extended Security Flags are not available]");
-            Console.Write("System State            : 0x" + SystemState.ToString("X2") + " = ");
-            switch (SystemState)
+            if (res == 0)
             {
-                case 0: Console.WriteLine("Transparent Mode"); break;
-                case 1: Console.WriteLine("Data Protection Unlocked"); break;
-                case 2: Console.WriteLine("Data Protection Locked"); break;
-                default: Console.WriteLine("Unknown"); break;
+                // PU-50n DP Raspberry Pi Edition = 0x40. What else is possible?
+                // CardManager.exe : If License Mode is equal to 0x20, then "Extended Security Flags" are not shown in the "Device Status" dialog, also getStatusException() is not called.
+                //                   However, the "Security Settings" dialog can still be opened?!
+                Console.WriteLine("License Mode            : 0x" + LicenseMode.ToString("X2"));
+                if (LicenseMode == 0x20) Console.WriteLine("                          [Extended Security Flags are not available]");
+                Console.Write("System State            : 0x" + SystemState.ToString("X2") + " = ");
+                switch (SystemState)
+                {
+                    case 0: Console.WriteLine("Transparent Mode"); break;
+                    case 1: Console.WriteLine("Data Protection Unlocked"); break;
+                    case 2: Console.WriteLine("Data Protection Locked"); break;
+                    default: Console.WriteLine("Unknown"); break;
+                }
+                Console.WriteLine("Retry Counter           : " + RetryCounter);
+                Console.WriteLine("SO Retry Counter        : " + SoRetryCounter);
+                Console.WriteLine("Number of Resets        : " + ResetCounter);
+                Console.WriteLine("CD_ROM address          : 0x" + CdRomAddress.ToString("X")); // This field is described in NetPolicyServer User Manual version 2.6-2.9 for CardManagerCLI.exe, but not shown in the current version of any EXE or DLL. It might be obsolete
+                Console.WriteLine("Extended Security Flags : 0x" + ExtSecurityFlags.ToString("X2"));
+                Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x1) == 0 ? "x" : " ") + "] Support Fast Wipe (~0x1)");
+                Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x2) != 0 ? "x" : " ") + "] Reset Requires SO PIN (0x2)");
+                Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x4) != 0 ? "x" : " ") + "] Unknown (0x4)");
+                Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x8) == 0 ? "x" : " ") + "] Multiple Partition Protection (~0x8)");
+                Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x10) != 0 ? "x" : " ") + "] Secure PIN Entry (0x10)");
+                Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x20) != 0 ? "x" : " ") + "] Login Status Survives Soft Reset (0x20)");
+                Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x40) != 0 ? "x" : " ") + "] Unknown (0x40)");
+                Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x80) != 0 ? "x" : " ") + "] Unknown (0x80)");
             }
-            Console.WriteLine("Retry Counter           : " + RetryCounter);
-            Console.WriteLine("SO Retry Counter        : " + SoRetryCounter);
-            Console.WriteLine("Number of Resets        : " + ResetCounter);
-            Console.WriteLine("CD_ROM address          : 0x" + CdRomAddress.ToString("X")); // This field is described in NetPolicyServer User Manual version 2.6-2.9 for CardManagerCLI.exe, but not shown in the current version of any EXE or DLL. It might be obsolete
-            Console.WriteLine("Extended Security Flags : 0x" + ExtSecurityFlags.ToString("X2"));
-            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x1) == 0 ? "x" : " ") + "] Support Fast Wipe (~0x1)");
-            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x2) != 0 ? "x" : " ") + "] Reset Requires SO PIN (0x2)");
-            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x4) != 0 ? "x" : " ") + "] Unknown (0x4)");
-            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x8) == 0 ? "x" : " ") + "] Multiple Partition Protection (~0x8)");
-            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x10) != 0 ? "x" : " ") + "] Secure PIN Entry (0x10)");
-            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x20) != 0 ? "x" : " ") + "] Login Status Survives Soft Reset (0x20)");
-            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x40) != 0 ? "x" : " ") + "] Unknown (0x40)");
-            Console.WriteLine("                          [" + ((ExtSecurityFlags & 0x80) != 0 ? "x" : " ") + "] Unknown (0x80)");
             Console.WriteLine("");
             #endregion
 
@@ -485,19 +531,22 @@ namespace SwissbitSecureSDUtils
             int ExceptionUnknown1, ExceptionUnknown2, ExceptionUnknown3, partition1Offset, ExceptionUnknown4;
             res = CardManagement.getStatusException(deviceName, out ExceptionUnknown1, out ExceptionUnknown2, out ExceptionUnknown3, out partition1Offset, out ExceptionUnknown4);
             Console.WriteLine("***** CardManagement.dll getStatusException() returns: 0x" + res.ToString("X4"));
-            // TODO: What are these values??? Somewhere should be partition1Offset
-            // NetPolicyServer User Manual version 2.6-2.9 shows 4 values
-            // - defaultCDRomAddress         (this is not part of the current EXE or DLL)
-            // - readExceptionAddress        (this is not part of the current EXE or DLL) 
-            // - partition1Offset (in hex)
-            // - partition1Offset (in dec)
-            // Assuming that partition1Offset is only 1 value returned by the DLL, then we would only have 3 values. What are the other 2?
-            // In CLI, argument 5 is shown as partition1Offset. Arguments 2, 3, 4, 6 are unknown yet.
-            Console.WriteLine("ExceptionUnknown1       : 0x" + ExceptionUnknown1.ToString("X"));
-            Console.WriteLine("ExceptionUnknown2       : 0x" + ExceptionUnknown2.ToString("X"));
-            Console.WriteLine("ExceptionUnknown3       : 0x" + ExceptionUnknown3.ToString("X"));
-            Console.WriteLine("partition1Offset        : 0x" + partition1Offset.ToString("X") + " = " + partition1Offset + " blocks");
-            Console.WriteLine("ExceptionUnknown4       : 0x" + ExceptionUnknown4.ToString("X"));
+            if (res == 0)
+            {
+                // TODO: What are these values??? Somewhere should be partition1Offset
+                // NetPolicyServer User Manual version 2.6-2.9 shows 4 values
+                // - defaultCDRomAddress         (this is not part of the current EXE or DLL)
+                // - readExceptionAddress        (this is not part of the current EXE or DLL) 
+                // - partition1Offset (in hex)
+                // - partition1Offset (in dec)
+                // Assuming that partition1Offset is only 1 value returned by the DLL, then we would only have 3 values. What are the other 2?
+                // In CLI, argument 5 is shown as partition1Offset. Arguments 2, 3, 4, 6 are unknown yet.
+                Console.WriteLine("ExceptionUnknown1       : 0x" + ExceptionUnknown1.ToString("X"));
+                Console.WriteLine("ExceptionUnknown2       : 0x" + ExceptionUnknown2.ToString("X"));
+                Console.WriteLine("ExceptionUnknown3       : 0x" + ExceptionUnknown3.ToString("X"));
+                Console.WriteLine("partition1Offset        : 0x" + partition1Offset.ToString("X") + " = " + partition1Offset + " blocks");
+                Console.WriteLine("ExceptionUnknown4       : 0x" + ExceptionUnknown4.ToString("X"));
+            }
             Console.WriteLine("");
             #endregion
 
@@ -505,7 +554,10 @@ namespace SwissbitSecureSDUtils
             int ApplicationVersion;
             res = CardManagement.getApplicationVersion(deviceName, out ApplicationVersion);
             Console.WriteLine("***** CardManagement.dll getApplicationVersion() returns: 0x" + res.ToString("X4"));
-            Console.WriteLine("Application Version     : " + ApplicationVersion.ToString("x")); // In the binary it can be seen that it also seems to be called "CFE version". Also funny typos: "Yor CFE version is" and "You must be loged in to read the partition table".
+            if (res == 0)
+            {
+                Console.WriteLine("Application Version     : " + ApplicationVersion.ToString("x")); // In the binary it can be seen that it also seems to be called "CFE version". Also funny typos: "Yor CFE version is" and "You must be loged in to read the partition table".
+            }
             Console.WriteLine("");
             #endregion
 
@@ -513,7 +565,10 @@ namespace SwissbitSecureSDUtils
             string baseFwVersion = "";
             res = CardManagement.getBaseFWVersion(deviceName, out baseFwVersion);
             Console.WriteLine("***** CardManagement.dll getBaseFWVersion() returns: 0x" + res.ToString("X4"));
-            Console.WriteLine("Base Firmware Version   : " + baseFwVersion);
+            if (res == 0)
+            {
+                Console.WriteLine("Base Firmware Version   : " + baseFwVersion);
+            }
             Console.WriteLine("");
             #endregion
 
@@ -521,7 +576,10 @@ namespace SwissbitSecureSDUtils
             string cardId = "";
             res = CardManagement.getCardId(deviceName, out cardId);
             Console.WriteLine("***** CardManagement.dll getCardId() returns: 0x" + res.ToString("X4"));
-            Console.WriteLine("Card ID                 : " + cardId);
+            if (res == 0)
+            {
+                Console.WriteLine("Card ID                 : " + cardId);
+            }
             Console.WriteLine("");
             #endregion
 
@@ -529,18 +587,21 @@ namespace SwissbitSecureSDUtils
             string controllerId = "";
             res = CardManagement.getControllerId(deviceName, out controllerId);
             Console.WriteLine("***** CardManagement.dll getControllerId() returns: 0x" + res.ToString("X4"));
-            // "getControllerId()" shows the "UniqueID" for USB PU-50n, while getCardId() shows something weird. Confusing!
-            // The "NetPolicyServer User Manual" writes:
-            //    Please note the last value in the output (“Controller ID”, Figure 12). This alphanumeric sequence
-            //    without any blank spaces is the Unique ID of the DataProtection device, which is needed for the Net
-            //    Policy database entry in the Net Policy server.
-            //    Note: It is not the value shown as the Unique Card ID!
-            // CardManager.exe of USB and CardManager of uSD both use getControllerId() to display the "Unique ID"
-            // field in the Device Status dialog. Therefore we can be sure that this is surely the Unique ID,
-            // and also identical to the Chip ID from the FTI.
-            // On the other hand, a screenshot in the Swissbit Raspberry Pi Secure Boot documentation shows
-            // that Controller ID can be all zeros. Weird?? Maybe just a development system?
-            Console.WriteLine("Unique ID               : " + controllerId);
+            if (res == 0)
+            {
+                // "getControllerId()" shows the "UniqueID" for USB PU-50n, while getCardId() shows something weird. Confusing!
+                // The "NetPolicyServer User Manual" writes:
+                //    Please note the last value in the output (“Controller ID”, Figure 12). This alphanumeric sequence
+                //    without any blank spaces is the Unique ID of the DataProtection device, which is needed for the Net
+                //    Policy database entry in the Net Policy server.
+                //    Note: It is not the value shown as the Unique Card ID!
+                // CardManager.exe of USB and CardManager of uSD both use getControllerId() to display the "Unique ID"
+                // field in the Device Status dialog. Therefore we can be sure that this is surely the Unique ID,
+                // and also identical to the Chip ID from the FTI.
+                // On the other hand, a screenshot in the Swissbit Raspberry Pi Secure Boot documentation shows
+                // that Controller ID can be all zeros. Weird?? Maybe just a development system?
+                Console.WriteLine("Unique ID               : " + controllerId);
+            }
             Console.WriteLine("");
             #endregion
 
@@ -553,56 +614,120 @@ namespace SwissbitSecureSDUtils
             //       On my stick it says in CardManagerCli.exe:
             //       0x00000000 PUBLIC_CDROM
             //       0x00018000 PRIVATE_RW      <-- Why does this say "0x18000" ? My CD ROM partition is 46 MB, so shouldn't the PrivateRW start earlier? 
+            // Note: CardManager.exe only calls getProtectionProfiles, not getPartitionTable... therefore, every information needs to be in getProtectionProfiles
             int ProtectionProfileUnknown1, ProtectionProfileUnknown2, ProtectionProfileUnknown3;
             res = CardManagement.getProtectionProfiles(deviceName, out ProtectionProfileUnknown1, out ProtectionProfileUnknown2, out ProtectionProfileUnknown3);
             Console.WriteLine("***** CardManagement.dll getProtectionProfiles() returns: 0x" + res.ToString("X4"));
-            Console.WriteLine("Unknown1                : 0x" + ProtectionProfileUnknown1.ToString("X8")); // For me, outputs 0x2
-            Console.WriteLine("Unknown2                : 0x" + ProtectionProfileUnknown2.ToString("X8")); // For me, outputs 0x3
-            Console.WriteLine("Unknown3                : 0x" + ProtectionProfileUnknown3.ToString("X8")); // For me, leaves value unchanged (therefore it seems to be an input argument)
+            if (res == 0)
+            {
+                Console.WriteLine("Unknown1                : 0x" + ProtectionProfileUnknown1.ToString("X8")); // For me, outputs 0x2
+                Console.WriteLine("Unknown2                : 0x" + ProtectionProfileUnknown2.ToString("X8")); // For me, outputs 0x3
+                Console.WriteLine("Unknown3                : 0x" + ProtectionProfileUnknown3.ToString("X8")); // For me, leaves value unchanged (therefore it seems to be an input argument)
+            }
             Console.WriteLine("");
             #endregion
+
+            /*
+            #region getPartitionTable (Work in progress)
+            int PartitionTableUnknown1;
+            // TODO: How does getPartitionTable(?, ?) work?
+            res = CardManagement.getPartitionTable(deviceName, out PartitionTableUnknown1); // Outputs 0x6FFD
+            Console.WriteLine("***** CardManagement.dll getPartitionTable() returns: 0x" + res.ToString("X4"));
+            if (res == 0)
+            {
+                Console.WriteLine("Unknown1                : 0x" + PartitionTableUnknown1.ToString("X8"));
+            }
+            Console.WriteLine("");
+            #endregion
+            */
 
             #region getStatusNvram()
             int NvramAccessRights, NvramTotalNvramSize, NvramRandomAccessSectors, NvramCyclicAccessSectors, NextCyclicWrite;
             res = CardManagement.getStatusNvram(deviceName, out NvramAccessRights, out NvramTotalNvramSize, out NvramRandomAccessSectors, out NvramCyclicAccessSectors, out NextCyclicWrite);
             Console.WriteLine("***** CardManagement.dll getStatusNvram() returns: 0x" + res.ToString("X4"));
-            int RandomRights = NvramAccessRights & 0xFF;
-            int CyclicRights = (NvramAccessRights >> 8) & 0xFF;
-            Console.WriteLine("Access Rights           : 0x" + NvramAccessRights.ToString("X8"));
-            Console.WriteLine("     Cyclic NVRAM       : 0x" + CyclicRights.ToString("X2"));
-            Console.WriteLine("                          [" + ((CyclicRights & 0x1) != 0 ? "x" : " ") + "] All Read (0x1)");
-            Console.WriteLine("                          [" + ((CyclicRights & 0x2) != 0 ? "x" : " ") + "] All Write (0x2)");
-            Console.WriteLine("                          [" + ((CyclicRights & 0x4) != 0 ? "x" : " ") + "] User Read (0x4)");
-            Console.WriteLine("                          [" + ((CyclicRights & 0x8) != 0 ? "x" : " ") + "] User Write (0x8)");
-            Console.WriteLine("                          [" + ((CyclicRights & 0x10) != 0 ? "x" : " ") + "] Wrap around (0x10)");
-            Console.WriteLine("                          [" + ((CyclicRights & 0x20) != 0 ? "x" : " ") + "] Security Officer Read (0x20)");
-            Console.WriteLine("                          [" + ((CyclicRights & 0x40) != 0 ? "x" : " ") + "] Security Officer Write (0x40)");
-            Console.WriteLine("                          [" + ((CyclicRights & 0x80) != 0 ? "x" : " ") + "] Fused Persistently (0x80)"); // not 100% sure
-            Console.WriteLine("     Random NVRAM       : 0x" + RandomRights.ToString("X2"));
-            Console.WriteLine("                          [" + ((RandomRights & 0x1) != 0 ? "x" : " ") + "] All Read (0x1)");
-            Console.WriteLine("                          [" + ((RandomRights & 0x2) != 0 ? "x" : " ") + "] All Write (0x2)");
-            Console.WriteLine("                          [" + ((RandomRights & 0x4) != 0 ? "x" : " ") + "] User Read (0x4)");
-            Console.WriteLine("                          [" + ((RandomRights & 0x8) != 0 ? "x" : " ") + "] User Write (0x8)");
-            Console.WriteLine("                          [" + ((RandomRights & 0x10) != 0 ? "x" : " ") + "] Not defined (0x10)");
-            Console.WriteLine("                          [" + ((RandomRights & 0x20) != 0 ? "x" : " ") + "] Security Officer Read (0x20)");
-            Console.WriteLine("                          [" + ((RandomRights & 0x40) != 0 ? "x" : " ") + "] Security Officer Write (0x40)");
-            Console.WriteLine("                          [" + ((RandomRights & 0x80) != 0 ? "x" : " ") + "] Fused Persistently (0x80)"); // not 100% sure
-            Console.WriteLine("Total NVRAM Size        : 0x" + NvramTotalNvramSize.ToString("X"));
-            Console.WriteLine("Random Access Sectors   : 0x" + NvramRandomAccessSectors.ToString("X"));
-            Console.WriteLine("Cyclic Access Sectors   : 0x" + NvramCyclicAccessSectors.ToString("X"));
-            Console.WriteLine("Next Cyclic Write       : 0x" + NextCyclicWrite.ToString("X"));
+            if (res == 0)
+            {
+                int RandomRights = NvramAccessRights & 0xFF;
+                int CyclicRights = (NvramAccessRights >> 8) & 0xFF;
+                Console.WriteLine("Access Rights           : 0x" + NvramAccessRights.ToString("X8"));
+                Console.WriteLine("     Cyclic NVRAM       : 0x" + CyclicRights.ToString("X2"));
+                Console.WriteLine("                          [" + ((CyclicRights & 0x1) != 0 ? "x" : " ") + "] All Read (0x1)");
+                Console.WriteLine("                          [" + ((CyclicRights & 0x2) != 0 ? "x" : " ") + "] All Write (0x2)");
+                Console.WriteLine("                          [" + ((CyclicRights & 0x4) != 0 ? "x" : " ") + "] User Read (0x4)");
+                Console.WriteLine("                          [" + ((CyclicRights & 0x8) != 0 ? "x" : " ") + "] User Write (0x8)");
+                Console.WriteLine("                          [" + ((CyclicRights & 0x10) != 0 ? "x" : " ") + "] Wrap around (0x10)");
+                Console.WriteLine("                          [" + ((CyclicRights & 0x20) != 0 ? "x" : " ") + "] Security Officer Read (0x20)");
+                Console.WriteLine("                          [" + ((CyclicRights & 0x40) != 0 ? "x" : " ") + "] Security Officer Write (0x40)");
+                Console.WriteLine("                          [" + ((CyclicRights & 0x80) != 0 ? "x" : " ") + "] Fused Persistently (0x80)"); // not 100% sure
+                Console.WriteLine("     Random NVRAM       : 0x" + RandomRights.ToString("X2"));
+                Console.WriteLine("                          [" + ((RandomRights & 0x1) != 0 ? "x" : " ") + "] All Read (0x1)");
+                Console.WriteLine("                          [" + ((RandomRights & 0x2) != 0 ? "x" : " ") + "] All Write (0x2)");
+                Console.WriteLine("                          [" + ((RandomRights & 0x4) != 0 ? "x" : " ") + "] User Read (0x4)");
+                Console.WriteLine("                          [" + ((RandomRights & 0x8) != 0 ? "x" : " ") + "] User Write (0x8)");
+                Console.WriteLine("                          [" + ((RandomRights & 0x10) != 0 ? "x" : " ") + "] Not defined (0x10)");
+                Console.WriteLine("                          [" + ((RandomRights & 0x20) != 0 ? "x" : " ") + "] Security Officer Read (0x20)");
+                Console.WriteLine("                          [" + ((RandomRights & 0x40) != 0 ? "x" : " ") + "] Security Officer Write (0x40)");
+                Console.WriteLine("                          [" + ((RandomRights & 0x80) != 0 ? "x" : " ") + "] Fused Persistently (0x80)"); // not 100% sure
+                Console.WriteLine("Total NVRAM Size        : 0x" + NvramTotalNvramSize.ToString("X"));
+                Console.WriteLine("Random Access Sectors   : 0x" + NvramRandomAccessSectors.ToString("X"));
+                Console.WriteLine("Cyclic Access Sectors   : 0x" + NvramCyclicAccessSectors.ToString("X"));
+                Console.WriteLine("Next Cyclic Write       : 0x" + NextCyclicWrite.ToString("X"));
+            }
             Console.WriteLine("");
             #endregion
 
-            #region getOverallSize
+            if (res == 0)
+            {
+                // TODO: I'm not sure if I did something wrong, or if CardManager.exe has a bug.
+                //       In Cyclic Access Memory: I write something in sector 0, then I click "Select New" (sector 1 gets selected), then I write something to the new sector.
+                //       But after I commit and re-open the Cyclic Access Dialog, every input is combined in sector 0 and all other sectors are empty.
+                //       getStatusNvram shows Next Cyclic Write 0x0.  And readNvram() shows everything in Cyclic sector 0.
+                #region readNvram()
+                // NVRAM has 7 sectors. Order is first RAM, then CAM.
+                Console.WriteLine("*****CardManagement.dll readNvram()");
+                for (int overallSector = 0; overallSector < (NvramRandomAccessSectors + NvramCyclicAccessSectors); overallSector++)
+                {
+                    bool cyclic = overallSector >= NvramRandomAccessSectors;
+                    int sector = cyclic ? overallSector - NvramRandomAccessSectors : overallSector;
+                    Console.WriteLine("    NVRAM Sector " + overallSector + " (" + (cyclic ? "Cyclic" : "Random") + " Access Memory " + sector + "):");
+                    byte[] nvRamOut = null;
+                    res = CardManagement.readNvram(deviceName, cyclic, sector, out nvRamOut);
+                    if (res != 0) Console.WriteLine("        readNvram() returns: 0x" + res.ToString("X4"));
+                    if (res == 0 && nvRamOut != null)
+                    {
+                        if (nvRamOut.Length == 0)
+                        {
+                            Console.WriteLine("        (Empty)");
+                        }
+                        else
+                        {
+                            string binaryString = "";
+                            for (int i = 0; i < nvRamOut.Length; i++)
+                            {
+                                binaryString += " " + nvRamOut[i].ToString("X2");
+                            }
+                            Console.WriteLine("        Size:   " + nvRamOut.Length + " Bytes");
+                            Console.WriteLine("        HEX:    " + binaryString.Trim());
+                            Console.WriteLine("        ASCII:  " + Encoding.ASCII.GetString(nvRamOut));
+                        }
+                    }
+                    Console.WriteLine("");
+                }
+                #endregion
+            }
+
+            #region getOverallSize()
             uint OverallSize;
             res = CardManagement.getOverallSize(deviceName, out OverallSize);
             Console.WriteLine("***** CardManagement.dll getOverallSize() returns: 0x" + res.ToString("X4"));
-            Console.WriteLine("Overall size            : 0x" + OverallSize.ToString("X") + " = " + OverallSize + " blocks = " + ((Int64)OverallSize * 512 / 1024 / 1024) + " MiB");
+            if (res == 0)
+            {
+                Console.WriteLine("Overall size            : 0x" + OverallSize.ToString("X") + " = " + OverallSize + " blocks = " + ((Int64)OverallSize * 512 / 1024 / 1024) + " MiB");
+            }
             Console.WriteLine("");
             #endregion
 
-            return res == 0;
+            return;
         }
 
         private static void VendorCommandsInterfaceDeviceStatus(string driveLetter)
