@@ -1139,12 +1139,12 @@ namespace SwissbitSecureSDUtils
    60FF reset
   170FF getCardId
   270FF getApplicationVersion
+10270FF getBaseFWVersion
   570FF getLoginChallenge
   670FF getControllerId
   770FF getProtectionProfiles
   870FF getPartitionTable
   970FF getOverallSize
-10270FF getBaseFWVersion
    ???? resetAndFormat
    80FF configureNvram
    80FF setAuthenticityCheckSecret
