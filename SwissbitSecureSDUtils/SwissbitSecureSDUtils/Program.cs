@@ -416,8 +416,15 @@ namespace SwissbitSecureSDUtils
       }
       bool isUSB = !deviceName.Contains(':');
 
-      var path = Directory.GetCurrentDirectory(); // Path.GetDirectoryName(Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().Location));
-      path = Path.Combine(path, "dll_" + (isUSB ? "usb" : "sd") + "_" + (IntPtr.Size == 8 ? "64" : "32"));
+      string relpath = "dll_" + (isUSB ? "usb" : "sd") + "_" + (IntPtr.Size == 8 ? "64" : "32");
+      System.Reflection.Assembly? asm = System.Reflection.Assembly.GetEntryAssembly();
+      string path = asm == null ? "" : (Path.GetDirectoryName(Path.GetDirectoryName(asm.Location + "\\")) ?? "");
+      path = Path.Combine(path, relpath);
+      if (!Path.Exists(path))
+      {
+        path = Directory.GetCurrentDirectory();
+        path = Path.Combine(path, relpath);
+      }
       bool ok = SetDllDirectory(path);
       if (!ok) throw new System.ComponentModel.Win32Exception();
       Console.WriteLine("Choose DLL " + path + "\\CardManagement.dll");
