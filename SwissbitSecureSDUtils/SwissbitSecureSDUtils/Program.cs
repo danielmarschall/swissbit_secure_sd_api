@@ -440,35 +440,50 @@ namespace SwissbitSecureSDUtils
 
       #region Try to find a writeable driveletter in order to call FileTunnelInterface (identify using Unique Chip ID)
       {
-        Console.WriteLine("Try to find a writeable driveletter in order to call FileTunnelInterface...");
         bool foundSomething = false;
-        string sUniqueId;
-        if (CardManagement.getControllerId(deviceName, out sUniqueId) == 0)
-        {
-          sUniqueId = sUniqueId.Replace(" ", "").ToLower().Trim();
-          sUniqueId = sUniqueId.TrimStart('0'); // vci.readChipID does this automatically, so we need to do it too
 
-          for (char driveLetter = 'd'; driveLetter <= 'z'; driveLetter++)
+        for (char driveLetter = 'd'; driveLetter <= 'z'; driveLetter++)
+        {
+          if (deviceName.ToLower() == driveLetter + ":")
           {
-            try
+            Console.WriteLine("Call FileTunnelInterface for device status...");
+            VendorCommandsInterfaceDeviceStatus(driveLetter.ToString());
+            foundSomething = true;
+          }
+        }
+
+        if (!foundSomething)
+        {
+          Console.WriteLine("Try to find a writeable driveletter in order to call FileTunnelInterface...");
+          string sUniqueId;
+          if (CardManagement.getControllerId(deviceName, out sUniqueId) == 0)
+          {
+            sUniqueId = sUniqueId.Replace(" ", "").ToLower().Trim();
+            sUniqueId = sUniqueId.TrimStart('0'); // vci.readChipID does this automatically, so we need to do it too
+
+            for (char driveLetter = 'd'; driveLetter <= 'z'; driveLetter++)
             {
-              VendorCommandsInterface vci = new VendorCommandsInterface(driveLetter.ToString());
-              string sChipId = vci.readChipID();
-              vci = null;
-              if (sChipId.ToLower().TrimStart('0').Equals(sUniqueId))
+              try
               {
-                Console.WriteLine("Found drive letter " + driveLetter.ToString().ToUpper() + ": to call FileTunnelInterface!");
-                Console.WriteLine("");
-                VendorCommandsInterfaceDeviceStatus(driveLetter.ToString());
-                foundSomething = true;
-                break;
+                VendorCommandsInterface vci = new VendorCommandsInterface(driveLetter.ToString());
+                string sChipId = vci.readChipID();
+                vci = null;
+                if (sChipId.ToLower().TrimStart('0').Equals(sUniqueId))
+                {
+                  Console.WriteLine("Found drive letter " + driveLetter.ToString().ToUpper() + ": to call FileTunnelInterface!");
+                  Console.WriteLine("");
+                  VendorCommandsInterfaceDeviceStatus(driveLetter.ToString());
+                  foundSomething = true;
+                  break;
+                }
               }
-            }
-            catch (Exception)
-            {
+              catch (Exception)
+              {
+              }
             }
           }
         }
+
         if (!foundSomething)
         {
           Console.WriteLine("Nothing found. You need to unlock the drive and/or a writeable partition must be visible");

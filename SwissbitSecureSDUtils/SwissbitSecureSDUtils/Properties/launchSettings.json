@@ -2,6 +2,7 @@
   "profiles": {
     "SwissbitSecureSDUtils": {
       "commandName": "Project",
+      "commandLineArgs": "D:",
       "workingDirectory": "..\\..\\"
     }
   }
