@@ -388,12 +388,6 @@ namespace SwissbitSecureSDUtils
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern bool SetDllDirectory(string path);
 
-    static void dll3264VerzeichnisSetzen()
-    {
-
-    }
-
-
     static void Main(string[] args)
     {
       Console.WriteLine("Swissbit Secure USB Stick 'PU-50n DP' and Secure SD Card 'PS-45u DP'");
@@ -401,14 +395,14 @@ namespace SwissbitSecureSDUtils
       Console.WriteLine("Access using FileTunnelInterface.dll (from TSE Maintenance Tool) and CardManagement.dll (from SDK)");
       Console.WriteLine("");
 
-      if (args.Length == 1 && (args[0] == "/?" || args[0] == "--help"))
+      if ((args.Length < 1) || (args.Length > 1) || (args.Length == 1 && (args[0] == "/?" || args[0] == "--help")))
       {
         Console.WriteLine("Syntax: SwissbitSecureSDUtils.exe 'Device Name'");
         Console.WriteLine("For PS-45u (uSD): Use drive letter, e.g. 'X:'");
         Console.WriteLine("For PU-50n (USB): Use SmartCard device name, e.g. 'Swissbit Secure USB PU-50n DP 0'");
         Console.WriteLine("If Device Name is omitted, then 'Swissbit Secure USB PU-50n DP 0' will be chosen.");
         Console.WriteLine("");
-        return;
+        if (args.Length != 0) return;
       }
 
       string deviceName;
@@ -422,11 +416,12 @@ namespace SwissbitSecureSDUtils
       }
       bool isUSB = !deviceName.Contains(':');
 
-      var path = Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().Location);
+      var path = Directory.GetCurrentDirectory(); // Path.GetDirectoryName(Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().Location));
       path = Path.Combine(path, "dll_" + (isUSB ? "usb" : "sd") + "_" + (IntPtr.Size == 8 ? "64" : "32"));
       bool ok = SetDllDirectory(path);
       if (!ok) throw new System.ComponentModel.Win32Exception();
-      Console.WriteLine("Choose DLL " + path + "\\CardManagement.dll for device '" + deviceName + "'");
+      Console.WriteLine("Choose DLL " + path + "\\CardManagement.dll");
+      Console.WriteLine("for device '" + deviceName + "'");
 
       // Test
       //SecureSd_Unlock_Card(deviceName, "test123");
@@ -1120,8 +1115,8 @@ namespace SwissbitSecureSDUtils
   // - When commands are sent, the first 32 bytes are overwritten by the hardcoded magic sequence
   //   10 6A F8 1A D6 F8 C8 70 AC 7E 85 F0 E9 9E F3 9D 1E 11 A1 BA 87 4A C6 DB 42 81 15 8E FE 6D 3C 81
   //   After that comes command data.
-  //   A few useful dumps:     LockCard          =  01 00 00 05     FF 31 00 00  00
-  //                           Verify("test123") =  01 00 00 0D     FF 30 00 00  08     07     74 65 73 74 31 32 33
+  //   A few useful dumps:     lockCard          =  01 00 00 05     FF 31 00 00  00
+  //                           verify("test123") =  01 00 00 0D     FF 30 00 00  08     07     74 65 73 74 31 32 33
   //                                                <??????> <len>( < command >  <len>( <len> ( t  e  s  t  1  2  3 )))
   //   ... some commands found in disassembly of the USB DLL (because the disassembly of the uSD DLL does not work correctly with IDA)
   /*
@@ -1137,6 +1132,7 @@ namespace SwissbitSecureSDUtils
   353FF clearProtectionProfiles
 10353FF setProtectionProfiles
    60FF reset
+   ???? resetAndFormat
   170FF getCardId
   270FF getApplicationVersion
 10270FF getBaseFWVersion
@@ -1145,9 +1141,8 @@ namespace SwissbitSecureSDUtils
   770FF getProtectionProfiles
   870FF getPartitionTable
   970FF getOverallSize
-   ???? resetAndFormat
-   80FF configureNvram
-   80FF setAuthenticityCheckSecret
+   80FF?configureNvram
+   80FF?setAuthenticityCheckSecret
   580FF setExtendedSecurityFlags
   780FF setSecureActivationKey
    D0FF readNvram

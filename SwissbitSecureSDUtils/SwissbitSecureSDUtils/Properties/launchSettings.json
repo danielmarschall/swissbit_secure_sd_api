@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SwissbitSecureSDUtils": {
+      "commandName": "Project",
+      "workingDirectory": "..\\..\\"
+    }
+  }
+}
