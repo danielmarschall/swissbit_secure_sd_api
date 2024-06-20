@@ -430,11 +430,113 @@ namespace SwissbitSecureSDUtils
       Console.WriteLine("Choose DLL " + path + "\\CardManagement.dll");
       Console.WriteLine("for device '" + deviceName + "'");
 
+      // Technical foot note / interesting things:
+      //
+      // How does the uSD version of CardManagement.dll communicate with the hardware?
+      // - The communication will be done through the file X:\__communicationFile
+      // - In the initial state, the file has the contents:
+      //   50 4C 45 41 53 45 20 44 4F 20 4E 4F 54 20 44 45 4C 45 54 45 20 54 48 49 53 20 46 49 4C 45 21 00 ("PLEASE DO NOT DELETE THIS FILE!\n")
+      //   followed by 480 NUL bytes.
+      // - When commands are sent, the first 32 bytes are overwritten by the hardcoded magic sequence
+      //   10 6A F8 1A D6 F8 C8 70 AC 7E 85 F0 E9 9E F3 9D 1E 11 A1 BA 87 4A C6 DB 42 81 15 8E FE 6D 3C 81
+      //   After that comes command data.
+      //   A few useful dumps:     lockCard          =  01 00 00 05     FF 31 00 00  00
+      //                                                <??????> <len>( < command >  <len>( no parameters ))
+      //                           verify("test123") =  01 00 00 0D     FF 30 00 00  08     07     74 65 73 74 31 32 33
+      //                                                <??????> <len>( < command >  <len>( <len> ( t  e  s  t  1  2  3 )))
+      // - Analysis of the commands is in the table below.
+      // - How to find which data is written? Patch CardManagement.dll and replace
+      //   55 8B EC FF 75 0C E8 D5 19 00 00 FF 75 08 FF 15 C4 80 00 10 83 C4 08 33 C0 5D  with
+      //   C3 8B EC FF 75 0C E8 D5 19 00 00 FF 75 08 FF 15 C4 80 00 10 83 C4 08 33 C0 5D
+      //   This method calls Import "remove" from api-ms-win-crt-filesystem-l1-1-0.dll.
+      //   To see what is written, execute one command (only one, because the second does not work since the file is not closed)
+      //   on a drive that is NOT a secure card, for example a harddrive or normal USB stick.
+      //   To see what is returned, execute one command on the real hardware.
+      //
+      // How does the USB version of CardManagement.dll communicate with the hardware?
+      // - The SmartCard API (WinSCard.dll) is called to transmit data.
+      //   The command codes seem to be the same as for the uSD card, because the command codes in the disassembly of the USB DLL match
+      //   the data that the uSD DLL wrote to the communcation file.
+      // - The file "<DeviceName>\__communicationFile" will be deleted. It is NOT used for transmitting data.
+      //   Note that this is non-sense because for the PU-50n, the <DeviceName> has to be a name rather than a drive letter,
+      //   so there will a file access to the local file "Swissbit Secure USB PU-50n DP 0\__communicationFile"
+      //
+      // How does the FileTunnelInterface.dll (from the TSE Maintenance Tool) communicate to the PU-50n (requires writeable drive letter though)?
+      // - It is neither SmartCard API, nor a file called __communicationFile!
+      // - ProcessMonitor shows: There are ONLY calls of CreateFile("H:"), ReadFile("H:"), WriteFile("H:") and CloseFile("H:")
+      //   Isn't this risky if FileTunnelInterface.dll would try to write to a regular drive?
+      //   I noticed: There are a LOT of Read-Accesses to offsets 0 (sector 0), 1024 (sector 2), 1536 (sector 3) before any WriteFile is called at all.
+      //   Theory: The read accesses are interpreted by a Swissbit device like a "morse code" and if the device reacts accordingly, then FileTunnelInterface.dll knows that it can now start WriteFile(),
+      //   and the device will most likely interprete these WriteFile() accesses as commands (like the TSE-IO.bin for the TSE)
+      // - Wow... there are a lot of different "interfaces" to communicate with devices over the file system...
+      // - Although FTI is a super tiny file, I could not manage to analyze it.
+      //
+      // How does WormApi.dll communicate with the TSE?
+      // - Via the file TSE-IO.bin (to a fixed sector). It is documented in the firmware specification.
+      //
+      // How does Swissbit Device Manager and libsbltm.dll communicate with PU-50n DP?
+      // - First via the File Tunnel protocol to \Device\Harddrisk3\DR4\
+      // - Then by writing to a non-existant file "G:\sb.vc"
+      // - No Data Protection may be enabled. A PU-50n TSE cannot be detected either.
+      //
+      // What I don't know yet (TODO):
+      // - How is the communication with the PS-45u card working? Also via Smartcard API? Or via __communicationFile?
+      // - Where does the Device Manager get data like Temperature, Modell-ID, etc.? Does not seem to be in the unknown LTM data?
+
+
+      /*
+       * TODO: Implement and analyze more commands. Also find out the return data.
+       * 
+   ---------------------------------------------------------------------------------------------------------------------
+    Command DLL name                        Parameter description                Example data
+   ---------------------------------------------------------------------------------------------------------------------
+       10FF activate(dev,?,?,?,?,?)
+    20010FF activateSecure(dev,?)
+       20FF deactivate(dev,?,?)
+       30FF verify(dev,pwd) = unlock card   Password with 8 bit length prefix    01 00 00 0A FF 30 00 00 05 04 11 22 33 44
+       31FF lockCard(dev)                   None (len=0)                         01 00 00 05 FF 31 00 00 00
+       40FF changePassword(dev,?,?,?,?)
+       50FF unblockPassword(dev,?,?,?,?)
+       53FF setCdromAreaBackToDefault(dev)
+      253FF setCdromAreaAndReadException(dev,?,?)
+      353FF clearProtectionProfiles(dev)
+    10353FF setProtectionProfiles(dev,?,?)
+       ???? resetAndFormat(dev,?,?)         not yet implemented / analyzed
+       60FF reset(dev,1,?)                  not yet implemented / analyzed
+      160FF reset(dev,0,?)                  not yet implemented / analyzed
+       70FF getStatus(dev,...)              None (len=0)                         01 00 00 05 FF 70 00 00 00
+      170FF getCardId(dev,...)              None (len=0)                         01 00 00 05 FF 70 01 00 00
+      270FF getApplicationVersion(dev,...)  None (len=0)                         01 00 00 05 FF 70 02 00 00
+    10270FF getBaseFWVersion(dev,...)       None (len=0)                         01 00 00 05 FF 70 02 01 00
+      370FF getStatusNvram(dev,...)         None (len=0)                         01 00 00 05 FF 70 03 00 00
+      470FF getStatusException(dev,...)     None (len=0)                         01 00 00 05 FF 70 04 00 00
+      570FF getLoginChallenge(dev,?)        not yet implemented / analyzed
+      670FF getControllerId(dev,...)        None (len=0)                         01 00 00 05 FF 70 06 00 00
+      770FF getProtectionProfiles(dev,...)  None (len=0)                         01 00 00 05 FF 70 07 00 00
+      870FF getPartitionTable(dev,...)
+      970FF getOverallSize(dev,...)
+      380FF configureNvram(dev,?,?,?,?,?)   not yet implemented / analyzed 
+      580FF setExtendedSecurityFlags(dev,?) not yet implemented / analyzed
+      680FF setAuthenticityCheckSecret(dev,?,0)
+     1680FF setAuthenticityCheckSecret(dev,?,1)
+      780FF setSecureActivationKey(dev,?)   not yet implemented / analyzed
+       D0FF readNvram(0,c), i.e. RAM        32 byte sector count <c>             01 00 00 09 FF D0 00 00 04 00 00 00 07
+      1D0FF readNvram(1,c), i.e. cyclic     32 byte sector count <c>             01 00 00 09 FF D0 01 00 04 00 00 00 07
+       D1FF writeNvram(dev,?,0,?,0,?)       not yet implemented / analyzed
+      1D1FF writeNvram(dev,?,1,?,0,?)       not yet implemented / analyzed
+    100D1FF writeNvram(dev,?,0,?,1,?)       not yet implemented / analyzed
+    101D1FF writeNvram(dev,?,1,?,1,?)       not yet implemented / analyzed
+       F1FF challengeFirmware(dev,?,?,?)    not yet implemented / analyzed 
+       F2FF checkAuthenticity(dev,?,?)      not yet implemented / analyzed 
+      (DLL) getVersion
+      (DLL) getBuildDateAndTime
+   ---------------------------------------------------------------------------------------------------------------------
+    */
+
       // Test
       //SecureSd_Unlock_Card(deviceName, "test123");
       //SecureSd_Lock_Card(deviceName);
       //return;
-
 
       SecureSd_DeviceInfo(deviceName);
 
@@ -1126,89 +1228,4 @@ namespace SwissbitSecureSDUtils
     }
 
   }
-
-  // Technical foot note / interesting things:
-  //
-  // How does the uSD version of CardManagement.dll communicate with the hardware?
-  // - The communication will be done through the file X:\__communicationFile
-  // - In the initial state, the file has the contents:
-  //   50 4C 45 41 53 45 20 44 4F 20 4E 4F 54 20 44 45 4C 45 54 45 20 54 48 49 53 20 46 49 4C 45 21 00 ("PLEASE DO NOT DELETE THIS FILE!\n")
-  //   followed by 480 NUL bytes.
-  // - When commands are sent, the first 32 bytes are overwritten by the hardcoded magic sequence
-  //   10 6A F8 1A D6 F8 C8 70 AC 7E 85 F0 E9 9E F3 9D 1E 11 A1 BA 87 4A C6 DB 42 81 15 8E FE 6D 3C 81
-  //   After that comes command data.
-  //   A few useful dumps:     lockCard          =  01 00 00 05     FF 31 00 00  00
-  //                           verify("test123") =  01 00 00 0D     FF 30 00 00  08     07     74 65 73 74 31 32 33
-  //                                                <??????> <len>( < command >  <len>( <len> ( t  e  s  t  1  2  3 )))
-  //   ... some commands found in disassembly of the USB DLL (because the disassembly of the uSD DLL does not work correctly with IDA)
-  /*
-   10FF activate
-20010FF activateSecure
-   20FF deactivate
-   30FF verify (unlock card)
-   31FF lockCard
-   40FF changePassword
-   50FF unblockPassword
-   53FF setCdromAreaBackToDefault
-  253FF setCdromAreaAndReadException
-  353FF clearProtectionProfiles
-10353FF setProtectionProfiles
-   60FF reset
-   ???? resetAndFormat
-  170FF getCardId
-  270FF getApplicationVersion
-10270FF getBaseFWVersion
-  570FF getLoginChallenge
-  670FF getControllerId
-  770FF getProtectionProfiles
-  870FF getPartitionTable
-  970FF getOverallSize
-   80FF?configureNvram
-   80FF?setAuthenticityCheckSecret
-  580FF setExtendedSecurityFlags
-  780FF setSecureActivationKey
-   D0FF readNvram
-   D1FF writeNvram
-   F1FF challengeFirmware
-   F2FF checkAuthenticity
-   ???? getStatus
-   ???? getStatusException
-   ???? getStatusNvram
-  (DLL) getVersion
-  (DLL) getBuildDateAndTime
-*/
-  // - TODO: Further analysis...
-  // - How to find which data is written? Execute with IDA, let the DLL write to a harddrive (or any other non-supported drive)
-  //   and cancel the process before the file is deleted.
-  //
-  // How does the USB version of CardManagement.dll communicate with the hardware?
-  // - The SmartCard API (WinSCard.dll) is called to transmit data.
-  //   The command codes seem to be the same as for the uSD card, because the command codes in the disassembly of the USB DLL match
-  //   the data that the uSD DLL wrote to the communcation file.
-  // - The file "<DeviceName>\__communicationFile" will be deleted. It is NOT used for transmitting data.
-  //   Note that this is non-sense because for the PU-50n, the <DeviceName> has to be a name rather than a drive letter,
-  //   so there will a file access to the local file "Swissbit Secure USB PU-50n DP 0\__communicationFile"
-  //
-  // How does the FileTunnelInterface.dll (from the TSE Maintenance Tool) communicate to the PU-50n (requires writeable drive letter though)?
-  // - It is neither SmartCard API, nor a file called __communicationFile!
-  // - ProcessMonitor shows: There are ONLY calls of CreateFile("H:"), ReadFile("H:"), WriteFile("H:") and CloseFile("H:")
-  //   Isn't this risky if FileTunnelInterface.dll would try to write to a regular drive?
-  //   I noticed: There are a LOT of Read-Accesses to offsets 0 (sector 0), 1024 (sector 2), 1536 (sector 3) before any WriteFile is called at all.
-  //   Theory: The read accesses are interpreted by a Swissbit device like a "morse code" and if the device reacts accordingly, then FileTunnelInterface.dll knows that it can now start WriteFile(),
-  //   and the device will most likely interprete these WriteFile() accesses as commands (like the TSE-IO.bin for the TSE)
-  // - Wow... there are a lot of different "interfaces" to communicate with devices over the file system...
-  // - Although FTI is a super tiny file, I could not manage to analyze it.
-  //
-  // How does WormApi.dll communicate with the TSE?
-  // - Via the file TSE-IO.bin (to a fixed sector). It is documented in the firmware specification.
-  //
-  // How does Swissbit Device Manager and libsbltm.dll communicate with PU-50n DP?
-  // - First via the File Tunnel protocol to \Device\Harddrisk3\DR4\
-  // - Then by writing to a non-existant file "G:\sb.vc"
-  // - No Data Protection may be enabled. A PU-50n TSE cannot be detected either.
-  //
-  // What I don't know yet (TODO):
-  // - How is the communication with the PS-45u card working? Also via Smartcard API? Or via __communicationFile?
-  // - Where does the Device Manager get data like Temperature, Modell-ID, etc.? Does not seem to be in the unknown LTM data?
-
 }
