@@ -1,32 +1,46 @@
 #include <iostream>
+#include <cstring>
+
+// TODO: DOES NOT YET WORK IN LINUX
+// After locking/unlocking, I need to do a umount/mount, then I can read files
+// However, when I change stuff and read it again, the changes are gone!
+// Also, I always need to be root! Not good!
+// Even by running sync and echo 3 > /proc/sys/vm/drop_caches , I get data corruption!
+
+#ifdef _WIN32
 #include <windows.h>
+#elif __linux__
+#include <unistd.h> // for sleep
+#include <fcntl.h> // for open
+#include <unistd.h> // for write, close
+#endif
 
 bool secure_sd_comm(char* commFileName, char* data) {
 
 #ifdef _WIN32
 
-
-	HANDLE hTSE = CreateFileA(commFileName, GENERIC_READ | GENERIC_WRITE, 0, NULL,
+	HANDLE hComm = CreateFileA(commFileName, GENERIC_READ | GENERIC_WRITE, 0, NULL,
 		CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_NO_BUFFERING, NULL);
-	if (hTSE == INVALID_HANDLE_VALUE) {
+	if (hComm == INVALID_HANDLE_VALUE) {
 		fprintf(stderr, "Cannot open file %s\n", commFileName);
 		return false;
 	}
 
 	// Write command
 	DWORD dwWritten;
-	if (!WriteFile(hTSE, data, 512, &dwWritten, NULL)) {
+	if (!WriteFile(hComm, data, 512, &dwWritten, NULL)) {
 		fprintf(stderr, "Cannot write to file %s\n", commFileName);
 		return false;
 	}
 
 	for (int i = 0; i < 10; i++) {
+		memset(data, 0, sizeof(data));
+
 		Sleep(200);
 
 		// Read reply
-		memset(data, 0, sizeof(data));
 		DWORD dwRead;
-		if ((SetFilePointer(hTSE, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER) || !ReadFile(hTSE, data, 512, &dwRead, NULL)) {
+		if ((SetFilePointer(hComm, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER) || !ReadFile(hComm, data, 512, &dwRead, NULL)) {
 			fprintf(stderr, "Cannot read from file %s\n", commFileName);
 			return false;
 		}
@@ -34,56 +48,54 @@ bool secure_sd_comm(char* commFileName, char* data) {
 		if (data[0] == 0x03) break; // NOT SURE: I could imagine that the first byte is the status, and 0x03 means "response data is available"
 	}
 
-	CloseHandle(hTSE);
+	CloseHandle(hComm);
 
 
 #elif __linux__
 
-	// TODO: Implement for Linux
+	#define BLOCKSIZE 512
+        void *buffer;
+        posix_memalign(&buffer, BLOCKSIZE, BLOCKSIZE);
+        memcpy(buffer, data, BLOCKSIZE);
+	// TODO: O_DIRECT does only work with super user! isn't there any possibility for normal users?
+        int f = open(commFileName, O_CREAT|O_TRUNC|O_RDWR|O_DIRECT|O_SYNC, S_IRUSR|S_IWUSR);
+        write(f, buffer, BLOCKSIZE);
 
+	for (int i = 0; i < 10; i++) {
+		memset(data, 0, sizeof(data));
 
-	FILE* x;
-	x = fopen(commFileName, "wb+");
-	setbuf(x, NULL); // unbuffered stdout   TODO: Does not work! For linux we need open with O_SYNC
-	if (!x) {
-		fprintf(stderr, "Cannot write to file %s\n", commFileName);
-		return 1;
+		usleep(200*1000); // 200ms
+
+		lseek(f, 0, SEEK_SET);
+		read(f, buffer, BLOCKSIZE);
+		memcpy(data, buffer, BLOCKSIZE);
+
+		if (data[0] == 0x03) break; // NOT SURE: I could imagine that the first byte is the status, and 0x03 means "response data is available"
 	}
-	fwrite(data, sizeof(char), sizeof(data), x);
-	fflush(x);
 
-	fseek(x, 0, SEEK_SET);
-	memset(data, 0, sizeof(data));
+        close(f);
 
-	sleep(200);
-
-	// TODO: wait for data to be ready
-	fread(&data[0], sizeof(char), sizeof(data), x);
-
-	fclose(x);
-
-
+        free(buffer);
 
 #else
 
-#error "OS not supported!"
-
-
+	#error "OS not supported!"
 
 #endif
 
-
 	remove(commFileName);
+
+	return data[0] == 0x03;
 }
 
 int main(int argc, char** argv) {
 
 	if (
-			(argc < 2) || 
+			(argc < 2) ||
 			((strcmp(argv[1], "LOCK") != 0) && (strcmp(argv[1], "UNLOCK") != 0)) ||
 			((strcmp(argv[1], "LOCK") == 0) && (argc != 3)) ||
 			((strcmp(argv[1], "UNLOCK") == 0) && (argc != 4))
-		) { 
+		) {
 		fprintf(stderr, "Unlocks a Swissbit PS-45u DP card using Windows or Linux!\n");
 #ifdef _WIN32
 		fprintf(stderr, "Syntax: %s LOCK <X:\\>\n", argv[0]);
@@ -91,6 +103,7 @@ int main(int argc, char** argv) {
 #else
 		fprintf(stderr, "Syntax: %s LOCK </mnt/sdcard/>\n", argv[0]);
 		fprintf(stderr, "Syntax: %s UNLOCK </mnt/sdcard/> <Password>\n", argv[0]);
+		fprintf(stderr, "Note: **MUST RUN AS SUPER USER**\n"); // TODO: Remove once we found a solution
 #endif
 		fprintf(stderr, "Note: \"Secure PIN Entry\" must be disabled! Does not work with PU-50n DP (USB).\n");
 		return 2;
@@ -118,6 +131,12 @@ int main(int argc, char** argv) {
 	secure_sd_comm(commFileName, &data[0]);
 
 	if ((data[0x00] != 0x03) || (data[0x01] != 0x00) || (data[0x02] != 0x00) || (data[0x03] != 0x11)) {
+		FILE* fDebug;
+		fDebug = fopen("response_debug.dat", "wb");
+		fwrite(data, sizeof(char), sizeof(data), fDebug);
+		fclose(fDebug);
+
+		fprintf(stderr, "Note: **MUST RUN AS SUPER USER**\n"); // TODO: Remove once we found a solution
 		fprintf(stderr, "Invalid response from device!\n");
 		return 1;
 	}
@@ -129,13 +148,6 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "You must disable \"Secure PIN Entry\" in the security settings of the device!\n");
 		return 1;
 	}
-
-	/*
-	FILE* fDebug;
-	fDebug = fopen("d:\\test.dat", "wb");
-	fwrite(data, sizeof(char), sizeof(data), fDebug);
-	fclose(fDebug);
-	*/
 
 	if (doLock) {
 		memset(data, 0, sizeof(data));
