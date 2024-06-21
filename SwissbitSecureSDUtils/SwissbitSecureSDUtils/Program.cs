@@ -567,22 +567,6 @@ namespace SwissbitSecureSDUtils
       //       It looks like there is a UUID written or read in the communication file, without any header?!
       //       TODO: Analyze how "secure pin entry" works
 
-      // How can you use PS-45u as "secure USB stick" (without Raspberry OS) for a non-Windows host?
-      // 1. Security Settings: NO Secure PIN Entry,  NO Multiple Partitions
-      // 2. Activate Data Protection
-      // 3. Prepare a communcation file with the following contents (e.g. for password "test") for unlocking
-      //    10 6A F8 1A D6 F8 C8 70 AC 7E 85 F0 E9 9E F3 9D
-      //    1E 11 A1 BA 87 4A C6 DB 42 81 15 8E FE 6D 3C 81
-      //    01 00 00[0D]FF 30 00 00[08 07]74 65 73 74 31 32
-      //    33 ................... (512 bytes length) -- For the locking file, remember to set the 3 length bytes correct! (square brackets)
-      //    And a communcation file for locking
-      //    10 6A F8 1A D6 F8 C8 70 AC 7E 85 F0 E9 9E F3 9D
-      //    1E 11 A1 BA 87 4A C6 DB 42 81 15 8E FE 6D 3C 81
-      //    01 00 00 05 FF 31 00 00 00 ................... (512 bytes length)
-      //    
-      // 4. Now you just need to "cat unlock.dat > /mnt/.../__communicationFile" to unlock the device!
-      // TODO: Write an Unix program that does this!
-
       // Test
       //SecureSd_Unlock_Card(deviceName, "test123");
       //SecureSd_Lock_Card(deviceName);

@@ -1,0 +1,62 @@
+
+In Windows partition SD card with 2 partitions
+
+
+diskpart
+
+list disk
+
+select disk xxx
+
+list partition
+
+select partition 1
+delete partition
+
+create partition primary size=150 offset=4096
+select partition 1
+format fs=fat32 label='comm'
+list partition
+
+create partition primary
+select partition 2
+format fs=fat32 label='data'
+list partition
+
+
+
+then, with Card Manager:
+
+1. set security flags
+	uncheck "secure pin entry"
+	check "multiple partition protection"
+
+2. create protection profiles
+
+	1. public cd rom
+	2. private rw
+
+3. activate data protection
+
+
+
+
+You can now use this "portable secure card" like an USB stick
+and use it on Windows (with card manager which you can copy to
+the CD ROM partition prior to enabling the data protection),
+or Linux with the UnlockCard scripts (which you can also copy
+
+Note: On Windows, the private RW will always show an error
+because its data is only available when login was successful.
+
+
+Warning:
+On Linux you must have 2 partitions on the card,
+otherwise data on the first partition will always be reset,
+like it is a cd rom partition.
+
+On Windows, it is fine to have only one partition
+with multiple partition protection disabled.
+
+But in order to be portable between Linux and Windows,
+you should have 2 partitions.
