@@ -1,12 +1,6 @@
 #include <iostream>
 #include <cstring>
 
-// TODO: DOES NOT YET WORK IN LINUX
-// After locking/unlocking, I need to do a umount/mount, then I can read files
-// However, when I change stuff and read it again, the changes are gone!
-// Also, I always need to be root! Not good!
-// Even by running sync and echo 3 > /proc/sys/vm/drop_caches , I get data corruption!
-
 #ifdef _WIN32
 #include <windows.h>
 #elif __linux__
@@ -103,7 +97,23 @@ int main(int argc, char** argv) {
 #else
 		fprintf(stderr, "Syntax: %s LOCK </mnt/sdcard/>\n", argv[0]);
 		fprintf(stderr, "Syntax: %s UNLOCK </mnt/sdcard/> <Password>\n", argv[0]);
-		fprintf(stderr, "Note: **MUST RUN AS SUPER USER**\n"); // TODO: Remove once we found a solution
+		fprintf(stderr, "\n");
+		fprintf(stderr, "ATTENTION:\n");
+		fprintf(stderr, "On Linux, only works if you have 2 partitions with the security profiles Public CDRom at offset 4096KB + Private RW for the rest\n");
+		fprintf(stderr, "otherwise, data will be lost since changes are always reverted from partition #1\n");
+		fprintf(stderr, "In the Extended Security Flags, the multiple partition option must be checked.\n");
+		fprintf(stderr, "(Windows is OK with having only 1 partition for everything)\n");
+		fprintf(stderr, "Please note, this program requires being run as root user.\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "USAGE EXAMPLE:\n");
+		fprintf(stderr, "mount /dev/sda1 /mnt/sdcard_comm/\n");
+		fprintf(stderr, "%s UNLOCK /mnt/sdcard_comm/ testpassword\n", argv[0]);
+		fprintf(stderr, "mount /dev/sda2 /mnt/sdcard_data/\n");
+		fprintf(stderr, "...\n");
+		fprintf(stderr, "umount /mnt/sdcard_data/\n");
+		fprintf(stderr, "%s LOCK /mnt/sdcard_comm/\n", argv[0]);
+		fprintf(stderr, "umount /mnt/sdcard_comm/\n");
+		fprintf(stderr, "\n");
 #endif
 		fprintf(stderr, "Note: \"Secure PIN Entry\" must be disabled! Does not work with PU-50n DP (USB).\n");
 		return 2;
@@ -136,8 +146,7 @@ int main(int argc, char** argv) {
 		fwrite(data, sizeof(char), sizeof(data), fDebug);
 		fclose(fDebug);
 
-		fprintf(stderr, "Note: **MUST RUN AS SUPER USER**\n"); // TODO: Remove once we found a solution
-		fprintf(stderr, "Invalid response from device!\n");
+		fprintf(stderr, "Invalid response from device! (Path correct? Running as root?)\n");
 		return 1;
 	}
 
