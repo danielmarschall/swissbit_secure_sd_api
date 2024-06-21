@@ -2,3 +2,4 @@ dll_sd_32/CardManagement_test.dll
 SwissbitSecureSDUtils/.vs
 SwissbitSecureSDUtils/SwissbitSecureSDUtils/bin
 SwissbitSecureSDUtils/SwissbitSecureSDUtils/obj
+*.idb

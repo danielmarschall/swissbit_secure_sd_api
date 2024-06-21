@@ -455,7 +455,8 @@ namespace SwissbitSecureSDUtils
       //
       // How does the USB version of CardManagement.dll communicate with the hardware?
       // - The SmartCard API (WinSCard.dll) is called to transmit data.
-      //   The command codes seem to be the same as for the uSD card, because the command codes in the disassembly of the USB DLL match
+      //   The command codes seem to be the same as for the uSD card,
+      //   because the command codes in the disassembly of the USB DLL match
       //   the data that the uSD DLL wrote to the communcation file.
       // - The file "<DeviceName>\__communicationFile" will be deleted. It is NOT used for transmitting data.
       //   Note that this is non-sense because for the PU-50n, the <DeviceName> has to be a name rather than a drive letter,
@@ -468,8 +469,7 @@ namespace SwissbitSecureSDUtils
       //   I noticed: There are a LOT of Read-Accesses to offsets 0 (sector 0), 1024 (sector 2), 1536 (sector 3) before any WriteFile is called at all.
       //   Theory: The read accesses are interpreted by a Swissbit device like a "morse code" and if the device reacts accordingly, then FileTunnelInterface.dll knows that it can now start WriteFile(),
       //   and the device will most likely interprete these WriteFile() accesses as commands (like the TSE-IO.bin for the TSE)
-      // - Wow... there are a lot of different "interfaces" to communicate with devices over the file system...
-      // - Although FTI is a super tiny file, I could not manage to analyze it.
+      // - FileTunnelInterface.dll from the Swissbit TSE does not work with PS-45u
       //
       // How does WormApi.dll communicate with the TSE?
       // - Via the file TSE-IO.bin (to a fixed sector). It is documented in the firmware specification.
@@ -478,9 +478,19 @@ namespace SwissbitSecureSDUtils
       // - First via the File Tunnel protocol to \Device\Harddrisk3\DR4\
       // - Then by writing to a non-existant file "G:\sb.vc"
       // - No Data Protection may be enabled. A PU-50n TSE cannot be detected either.
+      // How does it communicate with PS-45u?
+      // - First via the File Tunnel protocol to \Device\Harddrisk3\DR4\
+      // - Direct ReadFile access to specific sectors of drive G:\
+      //   Sector 598016   (offset 0x12400000)
+      //   Sector 1048576  (offset 0x20000000)
+      //   Sector 2097152  (offset 0x40000000)
+      //   Sector 3145728  (offset 0x60000000)
+      //   Sector 4194304  (offset 0x80000000)
+      //   For some reason, if you look at them with Hex Editor (without prior File Tunnel Interface?), you only see the string
+      //   *PROTECTED DATA*
+      // - Data Protection may be enabled
       //
       // What I don't know yet (TODO):
-      // - How is the communication with the PS-45u card working? Also via Smartcard API? Or via __communicationFile?
       // - Where does the Device Manager get data like Temperature, Modell-ID, etc.? Does not seem to be in the unknown LTM data?
 
 
@@ -517,8 +527,8 @@ namespace SwissbitSecureSDUtils
       970FF getOverallSize(dev,...)
       380FF configureNvram(dev,?,?,?,?,?)   not yet implemented / analyzed 
       580FF setExtendedSecurityFlags(dev,?) not yet implemented / analyzed
-      680FF setAuthenticityCheckSecret(dev,?,0)
-     1680FF setAuthenticityCheckSecret(dev,?,1)
+      680FF setAuthenticityCheckSecret(dev,?,0), stored clear-text?
+     1680FF setAuthenticityCheckSecret(dev,?,1), store hashed?
       780FF setSecureActivationKey(dev,?)   not yet implemented / analyzed
        D0FF readNvram(0,c), i.e. RAM        32 byte sector count <c>             01 00 00 09 FF D0 00 00 04 00 00 00 07
       1D0FF readNvram(1,c), i.e. cyclic     32 byte sector count <c>             01 00 00 09 FF D0 01 00 04 00 00 00 07
@@ -532,6 +542,27 @@ namespace SwissbitSecureSDUtils
       (DLL) getBuildDateAndTime
    ---------------------------------------------------------------------------------------------------------------------
     */
+
+      // NOTE: Card unlocking via verify() does only work if "Secure PIN entry" is disabled, otherwise error 6F05 (wrong password).
+      //       There seems to be some kind of challenge or additional security measurement.
+      //       It looks like there is a UUID written or read in the communication file, without any header?!
+      //       TODO: Analyze how "secure pin entry" works
+
+      // How can you use PS-45u as "secure USB stick" (without Raspberry OS) for a non-Windows host?
+      // 1. Security Settings: NO Secure PIN Entry,  NO Multiple Partitions
+      // 2. Activate Data Protection
+      // 3. Prepare a communcation file with the following contents (e.g. for password "test") for unlocking
+      //    10 6A F8 1A D6 F8 C8 70 AC 7E 85 F0 E9 9E F3 9D
+      //    1E 11 A1 BA 87 4A C6 DB 42 81 15 8E FE 6D 3C 81
+      //    01 00 00[0D]FF 30 00 00[08 07]74 65 73 74 31 32
+      //    33 ................... (512 bytes length) -- For the locking file, remember to set the 3 length bytes correct! (square brackets)
+      //    And a communcation file for locking
+      //    10 6A F8 1A D6 F8 C8 70 AC 7E 85 F0 E9 9E F3 9D
+      //    1E 11 A1 BA 87 4A C6 DB 42 81 15 8E FE 6D 3C 81
+      //    01 00 00 05 FF 31 00 00 00 ................... (512 bytes length)
+      //    
+      // 4. Now you just need to "cat unlock.dat > /mnt/.../__communicationFile" to unlock the device!
+      // TODO: Write an Unix program that does this!
 
       // Test
       //SecureSd_Unlock_Card(deviceName, "test123");
@@ -548,9 +579,15 @@ namespace SwissbitSecureSDUtils
         {
           if (deviceName.ToLower() == driveLetter + ":")
           {
-            Console.WriteLine("Call FileTunnelInterface for device status...");
-            VendorCommandsInterfaceDeviceStatus(driveLetter.ToString());
-            foundSomething = true;
+            try
+            {
+              Console.WriteLine("Call FileTunnelInterface for device status pf " + driveLetter + ":...");
+              VendorCommandsInterfaceDeviceStatus(driveLetter.ToString());
+              foundSomething = true;
+            }
+            catch (Exception)
+            {
+            }
           }
         }
 
@@ -637,7 +674,7 @@ namespace SwissbitSecureSDUtils
       Console.WriteLine("***** CardManagement.dll getStatus() returns: 0x" + res.ToString("X4"));
       if (res == 0)
       {
-        // PU-50n DP Raspberry Pi Edition = 0x40. What else is possible?
+        // PU-50n DP and PS-45u Raspberry Pi Edition = 0x40. What else is possible?
         // CardManager.exe : If License Mode is equal to 0x20, then "Extended Security Flags" are not shown in the "Device Status" dialog, also getStatusException() is not called.
         //                   However, the "Security Settings" dialog can still be opened?!
         Console.WriteLine("License Mode            : 0x" + LicenseMode.ToString("X2"));
@@ -685,7 +722,7 @@ namespace SwissbitSecureSDUtils
         Console.WriteLine("ExceptionUnknown2       : 0x" + ExceptionUnknown2.ToString("X"));
         Console.WriteLine("ExceptionUnknown3       : 0x" + ExceptionUnknown3.ToString("X"));
         Console.WriteLine("partition1Offset        : 0x" + partition1Offset.ToString("X") + " = " + partition1Offset + " blocks");
-        Console.WriteLine("ExceptionUnknown4       : 0x" + ExceptionUnknown4.ToString("X"));
+        Console.WriteLine("ExceptionUnknown4       : 0x" + ExceptionUnknown4.ToString("X")); //  On PS45u: partition2Size, on PU50n always 0?
       }
       Console.WriteLine("");
       #endregion
@@ -729,7 +766,8 @@ namespace SwissbitSecureSDUtils
       Console.WriteLine("***** CardManagement.dll getControllerId() returns: 0x" + res.ToString("X4"));
       if (res == 0)
       {
-        // "getControllerId()" shows the "UniqueID" for USB PU-50n, while getCardId() shows something weird. Confusing!
+        // "getControllerId()" shows the "UniqueID" for USB PU-50n and uSD PS-45u,
+        // while getCardId() shows something weird. Confusing!
         // The "NetPolicyServer User Manual" writes:
         //    Please note the last value in the output (“Controller ID”, Figure 12). This alphanumeric sequence
         //    without any blank spaces is the Unique ID of the DataProtection device, which is needed for the Net
@@ -824,7 +862,12 @@ namespace SwissbitSecureSDUtils
         //       getStatusNvram shows Next Cyclic Write 0x0.  And readNvram() shows everything in Cyclic sector 0.
         #region readNvram()
         // NVRAM has 7 sectors. Order is first RAM, then CAM.
-        Console.WriteLine("*****CardManagement.dll readNvram()");
+        Console.WriteLine("***** CardManagement.dll readNvram()");
+        if ((NvramRandomAccessSectors + NvramCyclicAccessSectors) == 0)
+        {
+          Console.WriteLine("0 RAM and 0 CAM sectors configured.");
+          Console.WriteLine("");
+        }
         for (int overallSector = 0; overallSector < (NvramRandomAccessSectors + NvramCyclicAccessSectors); overallSector++)
         {
           bool cyclic = overallSector >= NvramRandomAccessSectors;
