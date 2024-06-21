@@ -1,5 +1,7 @@
 #!/bin/bash
 
+chmod +x UnlockCard
+
 if [ ! -d /mnt/sdcard_comm ]; then
 	mkdir /mnt/sdcard_comm
 fi
