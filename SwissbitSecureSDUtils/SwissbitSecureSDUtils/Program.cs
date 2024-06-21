@@ -434,6 +434,8 @@ namespace SwissbitSecureSDUtils
       //
       // How does the uSD version of CardManagement.dll communicate with the hardware?
       // - The communication will be done through the file X:\__communicationFile
+      //   Actually, the file can have any name. It is just important that the magic sequence is written somewhere (and the reply is read from that sector),
+      //   this is how cryptovision TSE works. However, if another file name is chosen, there seems to be some problem with files on wrong sectors. So be careful and don't do it!
       // - In the initial state, the file has the contents:
       //   50 4C 45 41 53 45 20 44 4F 20 4E 4F 54 20 44 45 4C 45 54 45 20 54 48 49 53 20 46 49 4C 45 21 00 ("PLEASE DO NOT DELETE THIS FILE!\n")
       //   followed by 480 NUL bytes.
@@ -541,6 +543,23 @@ namespace SwissbitSecureSDUtils
       (DLL) getVersion
       (DLL) getBuildDateAndTime
    ---------------------------------------------------------------------------------------------------------------------
+   
+   RESPONSES
+   ---------
+
+   The first byte might be the status (0x03=finished, something else for "not ready")?
+   2nd and 3rd byte are 00. Unknown usage.
+   The 4th byte is the length of the response. Most fields are little endian.
+   The last 2 bytes of the response are the status code in big endian.
+   
+   Example 1: Reply for failed verify(), command 0x30FF:
+	03      00 00  02   6F 02
+	state?  ?????  len  response 0x6F02=wrongPassword
+   
+   Example 2: Reply for getStatus(), command 0x70FF:
+	03      00 00    11   40   02       0E    0F      00 00 00 01     00 00 FF FF FF FF   2B       90 00 
+	state?  ?????    len  lic sysstate retry soRetry  resetCounter    ????? cdRomAddr    secflag   response 0x9000=ok
+   
     */
 
       // NOTE: Card unlocking via verify() does only work if "Secure PIN entry" is disabled, otherwise error 6F05 (wrong password).

@@ -2,4 +2,9 @@ dll_sd_32/CardManagement_test.dll
 SwissbitSecureSDUtils/.vs
 SwissbitSecureSDUtils/SwissbitSecureSDUtils/bin
 SwissbitSecureSDUtils/SwissbitSecureSDUtils/obj
+UnlockCard/.vs
+UnlockCard/x86
+UnlockCard/x64
+UnlockCard/UnlockCard/x86
+UnlockCard/UnlockCard/x64
 *.idb
