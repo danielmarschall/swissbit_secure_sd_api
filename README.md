@@ -7,9 +7,9 @@ This repository contains:
 
 1. Partial reverse enginerring, documentation and header files for Swissbit PS-45u DP and PU-50n DP Secure USB Stick, since the "SDK" is just a bunch of useless tools and docs, but nothing to develop software with (and this is the purpose of a Software DEVELOPMENT Kit).
 
-2. Swissbit Secure SD Utils (for Windows, language C#): A command line utility written in C that reads all the information of the medium. It also contains header files, so it can be used to implement programmatically lock and unlock a secure SD card or secure SD stick by calling CardManagement.dll. Note that the PU-50n DP Raspberry Pi Edition can be used as 8 GB Secure USB Stick! It is not just a dongle, but can also store data!
+2. "Swissbit Secure SD Utils" (for Windows, language C#): A command line utility written in C that reads all the information of the medium. It also contains header files, so it can be used to implement programmatically lock and unlock a secure SD card or secure SD stick by calling CardManagement.dll. Note that the PU-50n DP Raspberry Pi Edition can be used as 8 GB Secure USB Stick! It is not just a dongle, but can also store data!
 
-3. Unlock Card (For Linux, language C): Can be used to unlock PS-45u if you simply want to use it as "Secure SD Card" and mount and unmount it using Linux (without booting from it). Implements low-level file access without any library.
+3. "Unlock Card" command line tool (For Linux, language C): Can be used to unlock PS-45u if you simply want to use it as "Secure SD Card" and mount and unmount it using Linux (without booting from it). Implements low-level file access without any library.
 
 The C# library can help you using the USD/uSD device by calling the DLL instead of the non-working CLI EXE.
 I have also found a lot of undocumented things, e.g. how to interprete the extended security flags and how to read the Life Time Management (LTM) data.
@@ -148,7 +148,7 @@ cdecl int getApplicationVersion(string deviceName, out int ApplicationVersion)
                   state? ????? len(cmd      len())
    Raw data out:  
 
-cdecl int getBaseFWVersion( string deviceName, IntPtr firmware8bytes, ref int part2)
+cdecl int getBaseFWVersion(string deviceName, IntPtr firmware8bytes, ref int part2)
    Purpose:       Get firmware version of the device
                   Note: Firmware8bytes is read left to right, while part2 is appended reading right to left.
                   The screenshots in the manual shows the examples "211028s9 X100" and "170614s8  110"
@@ -315,7 +315,7 @@ cdecl setCdromAreaBackToDefault(dev)
    Raw data in:   
    Raw data out:  
 
-cdecl setExtendedSecurityFlags(dev,?)
+cdecl setExtendedSecurityFlags(string deviceName, int newFlags)
    Purpose:       Sets extended security flags
    Command:       580FF
    Raw data in:   
@@ -342,7 +342,7 @@ cdecl unblockPassword(dev,?,?,?,?)
 cdecl int verify(string deviceName, byte[] code, int codeLength)
    Purpose:       Unlocks data protection
                   If Extended Security Flag 0x10 (Secure PIN Entry) is enabled, then code=sha256(sha256(password)+challenge)
-                  where challenge comes from getHashChallenge(), which gets changed after each login.
+                  where challenge comes from getHashChallenge(), which gets changed after each login or powercycle.
                   If Secure PIN Entry is disabled, then code=password.
    Command:       30FF
    Raw data in:   01     0000 0A  FF300000 05  0411223344
@@ -524,3 +524,15 @@ Looking at the disassembly, the SmartCard API seems to use the same commands, bu
    03      00 00    11   40   02       0E    0F      00 00 00 01     00 00 FF FF FF FF   2B       90 00 
    state?  ?????    len  lic sysstate retry soRetry  resetCounter    ????? cdRomAddr    secflag   response 0x9000=ok
 ```
+
+## Disclaimer
+
+I am not responsible for any damages that may cause
+by using this API or documentation. Note that
+programmatically logging in with wrong password
+(or wrong implementation) can destroy the device.
+
+Use this API for private use only.
+If you need this API commercially, please
+search legal advice if this API may be used
+(It's okay for me, but I am not sure about Swissbit).

@@ -278,7 +278,17 @@ namespace SwissbitSecureSDUtils
 
     // TODO: Implement setCdromAreaBackToDefault(...)
 
-    // TODO: Implement setExtendedSecurityFlags(...)
+    #region setExtendedSecurityFlags
+    [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "setExtendedSecurityFlags", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static extern int _setExtendedSecurityFlags(
+        [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+        [MarshalAs(UnmanagedType.SysUInt)] int newFlags);
+    public static int setExtendedSecurityFlags(string deviceName, int newFlags)
+    {
+      return _setExtendedSecurityFlags(deviceName, newFlags);
+    }
+    #endregion
 
     // TODO: Implement setProtectionProfiles(...)
 
