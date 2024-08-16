@@ -51,7 +51,7 @@ Unlocking the card is done via the `verify()` method in CardManagement.dll.
 int LicMode, SysState, RetryCount, SoRetryCount, ResetCount, CdRomAddress, ExtSecurityFlags;
 getStatus(deviceName, &LicMode, &SysState, &RetryCount, &SoRetryCount, &ResetCount, &CdRomAddress, &ExtSecurityFlags);
 if (ExtSecurityFlags&0x10 == 0) {
-	verify(device, password);
+  verify(device, password);
 }
 ```
 
@@ -61,10 +61,10 @@ If the extended security flag "Secure PIN Entry" is enabled, then the login is d
 int LicMode, SysState, RetryCount, SoRetryCount, ResetCount, CdRomAddress, ExtSecurityFlags;
 getStatus(deviceName, &LicMode, &SysState, &RetryCount, &SoRetryCount, &ResetCount, &CdRomAddress, &ExtSecurityFlags);
 if (ExtSecurityFlags&0x10 != 0) {
-	char[32] challenge;
-	getHashChallenge(device, &challenge); // Alias of getLoginChallenge(). The login challenge (also called hash challenge) gets changed after each successful login.
-	code = sha256(sha256(password) + challenge);
-	verify(device, code);
+  char[32] challenge;
+  getHashChallenge(device, &challenge); // Alias of getLoginChallenge(). The login challenge (also called hash challenge) gets changed after each successful login or powercycle.
+  code = sha256(sha256(password) + challenge);
+  verify(device, code);
 }
 ```
 
@@ -88,11 +88,276 @@ Return 6F05 : No password entered, or password too short
 Return 6FFC : Security Settings changed; need powercycle to reload stuff
 ```
 
-### CardManagement.dll methods
+### CardManagement.dll API
 
-See the source code of SwissbitSecureSDUtils to see how to use the methods the library CardManagement.dll exports.
+This is the current state of the research. They known methods are implemented in SwissbitSecureSDUtils (in C#).
 
-Note that not all methods have yet been researched.
+```
+cdecl activate(dev,?,?,?,?,?)
+   Purpose:       Unknown
+   Command:       10FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl activateSecure(dev,?)
+   Purpose:       Unknown
+   Command:       20010FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl challengeFirmware(dev,?,?,?)
+   Purpose:       Unknown
+   Command:       F1FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl changePassword(dev,?,?,?,?)
+   Purpose:       Changes the password (which?)
+   Command:       40FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl checkAuthenticity(dev,?,?)
+   Purpose:       Unknown
+   Command:       F2FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl clearProtectionProfiles(dev)
+   Purpose:       Unknown
+   Command:       353FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl configureNvram(dev,?,?,?,?,?)
+   Purpose:       Unknown
+   Command:       380FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl deactivate(dev,?,?)
+   Purpose:       Unknown
+   Command:       20FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl int getApplicationVersion(string deviceName, out int ApplicationVersion)
+   Purpose:       In the binary it can be seen that it also seems to be called "CFE version". Also funny typos: "Yor CFE version is" and "You must be loged in to read the partition table".
+   Command:       270FF
+   Raw data in:   01     0000  05  FF700200 00
+                  state? ????? len(cmd      len())
+   Raw data out:  
+
+cdecl int getBaseFWVersion( string deviceName, IntPtr firmware8bytes, ref int part2)
+   Purpose:       Get firmware version of the device
+                  Note: Firmware8bytes is read left to right, while part2 is appended reading right to left.
+                  The screenshots in the manual shows the examples "211028s9 X100" and "170614s8  110"
+                  My USB device (PU-50n DP) has "180912u9  106" but showns in the Swissbit Device Manager as "180912 1.06"
+   Command:       10270FF
+   Raw data in:   01     0000 05  FF700201 00
+                  state? ???? len(cmd      len())
+   Raw data out:  
+
+cdecl char* getBuildDateAndTime()
+   Purpose:       Shows the version of the DLL. Does not contact the device. Only for 2019 USB/uSD DLL, not for 2022 uSD DLL.
+   Command:       n/a
+   Raw data in:   n/a
+   Raw data out:  n/a
+
+cdecl int getCardId(string deviceName, IntPtr cardid12bytes)
+   Purpose:       Unknown. This is NOT the unique ID of the card!
+   Command:       170FF
+   Raw data in:   01     0000 05  FF700100 00
+                  state? ???? len(cmd      len())
+   Raw data out:  
+
+cdecl int getControllerId(string deviceName, IntPtr conrollerId, ref int conrollerIdSize)
+   Purpose:       THIS is the unique ID of the card! Don't be tricked by the name...
+                  The "NetPolicyServer User Manual" writes:
+                              Please note the last value in the output (“Controller ID”, Figure 12). This alphanumeric sequence
+                              without any blank spaces is the Unique ID of the DataProtection device, which is needed for the Net
+                              Policy database entry in the Net Policy server.
+                              Note: It is not the value shown as the Unique Card ID!
+                  CardManager.exe of USB and CardManager of uSD both use getControllerId() to display the "Unique ID"
+                  field in the Device Status dialog. Therefore we can be sure that this is surely the Unique ID,
+                  and also identical to the Chip ID from the FileTunnelInterface.
+   Command:       670FF
+   Raw data in:   01     0000 05  FF700600 00
+                  state? ???? len(cmd      len())
+   Raw data out:  
+
+cdecl int getHashChallenge(string deviceName, IntPtr challenge)
+cdecl int getLoginChallenge(string deviceName, IntPtr challenge) // alias
+   Purpose:       Returns a Nonce for the SHA256 Challenge–response authentication. Gets reset after each successful login or powercycle.
+   Command:       570FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl int getOverallSize(string deviceName, out uint OverallSize)
+   Purpose:       Get memory size in units of 512 byte blocks
+   Command:       970FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl int getPartitionTable(string deviceName, out int PartitionTableUnknown1)
+   Purpose:       Unknown
+   Command:       870FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl int getProtectionProfiles(string deviceName, out int ProtectionProfileUnknown1, out int ProtectionProfileUnknown2, out int ProtectionProfileUnknown3)
+   Purpose:       Unknown
+   Command:       770FF
+   Raw data in:   01     0000 05  FF700700 00
+                  state? ???? len(cmd      len())
+   Raw data out:  
+
+cdecl int getStatus(string deviceName, out int LicenseMode, out int SystemState, out int RetryCounter, out int SoRetryCounter, out int ResetCounter, out int CdRomAddress, out int ExtSecurityFlags)
+   Purpose:       Get information about the current state of the device
+                  License Mode   = PU-50n DP and PS-45u Raspberry Pi Edition = 0x40. What else is possible?
+                                   CardManager.exe : If License Mode is equal to 0x20, then "Extended Security Flags" are not shown in the "Device Status" dialog, also getStatusException() is not called.
+                                   However, the "Security Settings" dialog can still be opened?!
+                  System State   = 0 (Transparent Mode)
+                                   1 (Data Protection Unlocked)
+                                   2 (Data Protection Locked)
+                  RetryCounter   = Current retry counter for the normal user
+                  SoRetryCounter = Current retry counter for the Security Officer
+                  ResetCounter   = Device Reset counter
+                  CD_ROM_Address = This field is described in NetPolicyServer User Manual version 2.6-2.9 for CardManagerCLI.exe, but not shown in the current version of any EXE or DLL. It might be obsolete
+                  Extended Security Flags:
+                  - Support Fast Wipe (~0x1)
+                  - Reset Requires SO PIN (0x2)
+                  - Unknown (0x4)
+                  - Multiple Partition Protection (~0x8)
+                  - Secure PIN Entry (0x10)
+                  - Login Status Survives Soft Reset (0x20)
+                  - Unknown (0x40)
+                  - Unknown (0x80)
+   Command:       70FF
+   Raw data in:   01     0000 05  FF700000 00
+                  state? ???? len(cmd      len())
+   Raw data out:  03     0000 11  40  02       0E    0F      00000001      0000 FFFFFFFF  2B      9000 
+                  state? ???? len(lic sysstate retry soRetry resetCounter  ???? cdRomAddr secflag response )
+
+cdecl int getStatusException(string deviceName, out int ExceptionUnknown1, out int ExceptionUnknown2, out int ExceptionUnknown3, out int partition1Offset, out int ExceptionUnknown4)
+   Purpose:       Unknown
+   Command:       470FF
+   Raw data in:   01     0000 05  FF700400 00
+                  state? ???? len(cmd      len())
+   Raw data out:  
+
+cdecl int getStatusNvram(string deviceName, out int AccessRights, out int TotalNvRamSize, out int RandomAccessSectors, out int CyclicAccessSectors, out int NextCyclicWrite)
+   Purpose:       Get NVRAM configuration
+                  Returned AccessRights = CyclicRights || RandomRights
+                  CyclicRights and RandomRights are a flag byte containing:
+                  - All Read (0x1)
+                  - All Write (0x2)
+                  - User Read (0x4)
+                  - User Write (0x8)
+                  - Wrap around (0x10), only defined for CyclicRights, not RandomRights
+                  - Security Officer Read (0x20)
+                  - Security Officer Write (0x40)
+                  - Fused Persistently (0x80), not 100% sure
+   Command:       370FF
+   Raw data in:   01     0000 05  FF700300 00
+                  state? ???? len(cmd      len())
+   Raw data out:  
+
+cdecl int getVersion()
+   Purpose:       DLL only version, no device contact.
+   Command:       n/a
+   Raw data in:   n/a
+   Raw data out:  n/a
+
+cdecl int lockCard(string deviceName)
+   Purpose:       Locks data protection
+   Command:       31FF
+   Raw data in:   01     0000 05  FF310000  00
+                  state? ???? len(cmd       len())
+   Raw data out:  
+
+cdecl int readNvram(string deviceName, IntPtr value, ref int valueLength, bool cyclic, int sectorNumber)
+   Purpose:       Reads NVRAM data
+   Command:        D0FF if cyclic=0
+                  1D0FF if cyclic=1
+   Raw data in:   01     0000 09  FFD00100 04  00000007
+                  state? ???? len(cmd cy   len(sector  ))
+   Raw data out:  
+
+cdecl reset(dev,unk,?)
+   Purpose:       Resets the device
+   Command:       60FF (if unk=1), 160FF (if unk=0)
+   Raw data in:   
+   Raw data out:  
+
+cdecl resetAndFormat(dev,?,?)
+   Purpose:       Reset and format the device
+   Command:       ???
+   Raw data in:   
+   Raw data out:  
+
+cdecl setAuthenticityCheckSecret(dev,?,unk)
+   Purpose:       Unknown
+   Command:        680FF if unk=0 (store cleartext?)
+                  1680FF if unk=1 (store hashed?)
+   Raw data in:   
+   Raw data out:  
+
+cdecl setCdromAreaAndReadException(dev,?,?)
+   Purpose:       Unknown
+   Command:       253FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl setCdromAreaBackToDefault(dev)
+   Purpose:       Unknown
+   Command:       53FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl setExtendedSecurityFlags(dev,?)
+   Purpose:       Sets extended security flags
+   Command:       580FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl setProtectionProfiles(dev,?,?)
+   Purpose:       Unknown
+   Command:       10353FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl setSecureActivationKey(dev,?)
+   Purpose:       Unknown
+   Command:       780FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl unblockPassword(dev,?,?,?,?)
+   Purpose:       Unknown
+   Command:       50FF
+   Raw data in:   
+   Raw data out:  
+
+cdecl int verify(string deviceName, byte[] code, int codeLength)
+   Purpose:       Unlocks data protection
+                  If Extended Security Flag 0x10 (Secure PIN Entry) is enabled, then code=sha256(sha256(password)+challenge)
+                  where challenge comes from getHashChallenge(), which gets changed after each login.
+                  If Secure PIN Entry is disabled, then code=password.
+   Command:       30FF
+   Raw data in:   01     0000 0A  FF300000 05  0411223344
+                  state? ???? len(cmd      len(code      ))
+   Raw data out:  
+
+cdecl writeNvram(dev,?,unk1,?,unk2,?)
+   Purpose:       Writes NVRAM
+   Command:          D1FF if unk1=0 and unk2=0
+                    1D1FF if unk1=1 and unk2=0
+                  100D1FF if unk1=0 and unk2=1
+                  101D1FF if unk1=1 and unk2=1
+   Raw data in:   
+   Raw data out:  
+```
 
 ### How does the uSD version of CardManagement.dll communicate with the hardware?
 
@@ -188,7 +453,7 @@ Note that not all methods have yet been researched.
 
 ### Raw Commands
 
-Commands are written to X:\__communicationFile (write-through) and then the result is read from that file (read without buffer).
+Commands are written to `X:\__communicationFile` (write-through) and then the result is read from that file (read without buffer).
 
 Looking at the disassembly, the SmartCard API seems to use the same commands, but I don't have knowledge with that API.
 
@@ -203,7 +468,7 @@ Looking at the disassembly, the SmartCard API seems to use the same commands, bu
        10FF activate(dev,?,?,?,?,?)
     20010FF activateSecure(dev,?)
        20FF deactivate(dev,?,?)
-       30FF verify(dev,pwd) = unlock card   Password with 8 bit length prefix    01 00 00 0A FF 30 00 00 05 04 11 22 33 44
+       30FF verify(dev,code) = unlock card  Code with 8 bit length prefix        01 00 00 0A FF 30 00 00 05 04 11 22 33 44
        31FF lockCard(dev)                   None (len=0)                         01 00 00 05 FF 31 00 00 00
        40FF changePassword(dev,?,?,?,?)
        50FF unblockPassword(dev,?,?,?,?)
@@ -252,10 +517,10 @@ Looking at the disassembly, the SmartCard API seems to use the same commands, bu
    The last 2 bytes of the response are the status code in big endian.
    
    Example 1: Reply for failed verify(), command 0x30FF:
-	03      00 00  02   6F 02
-	state?  ?????  len  response 0x6F02=wrongPassword
+   03      00 00  02   6F 02
+   state?  ?????  len  response 0x6F02=wrongPassword
    
    Example 2: Reply for getStatus(), command 0x70FF:
-	03      00 00    11   40   02       0E    0F      00 00 00 01     00 00 FF FF FF FF   2B       90 00 
-	state?  ?????    len  lic sysstate retry soRetry  resetCounter    ????? cdRomAddr    secflag   response 0x9000=ok
+   03      00 00    11   40   02       0E    0F      00 00 00 01     00 00 FF FF FF FF   2B       90 00 
+   state?  ?????    len  lic sysstate retry soRetry  resetCounter    ????? cdRomAddr    secflag   response 0x9000=ok
 ```
