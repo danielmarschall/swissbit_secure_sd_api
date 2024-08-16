@@ -1,52 +1,20 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace SwissbitSecureSDUtils
 {
-  // ******************************************************************
-  // There is a big Problem with CardManagerLite.exe and CardManagerCLI.exe
-  // For the USB Stick 'PU-50n DP', CardManagement.dll cannot access the device via drive letter (e.g. "G:\").
-  // It can only access the SmartCard name "Swissbit Secure USB PU-50n DP 0".
-  // You can verify this by query "G:\" in CardManager.exe .
-  // The big problem is that CardManagerLite.exe and CardManagerCli.exe only accept drive letters  (e.g. "G:"), not SmartCard names.
-  // Therefore, you CANNOT use the CLI tool for the USB Secure USB Stick! This is a showstopper, so you must use the GUI tool and cannot
-  // configure the secure USB stick via command line or programmatically. (Isn't this the purpose of a Software DEVELOPMENT Kit?)
-  // 
-  // To fix this issue, patch CardManagerCLI.exe by disabling the syntax check for the "--mountpoint" argument:
-  //     Search:  75 1F 0F BE 02 50 FF 15 D8 D2 40 00 8B 7D FC 83 C4 04 85 C0 74 0E 8B 47 0C 80 78 01 3A 74
-  //     Replace: 90 90 0F BE 02 50 FF 15 D8 D2 40 00 8B 7D FC 83 C4 04 85 C0 90 90 8B 47 0C 80 78 01 3A EB
-  //              ^^ ^^                                                       ^^ ^^                      ^^
-  // Some commands like fetching Partition Table don't seem to work though. I didn't investigate that yet.
-  // ******************************************************************
-
-  // ******************************************************************
-  // In addition, this C# library can help you using the USD/uSD device by calling the DLL instead of the non-working CLI EXE.
-  // I have also found a lot of undocumented things, e.g. how to interprete the extended security flags and how to read the Life Time Management (LTM) data.
-  // All these things shall be part of the documentation, but they are not. The documentation is insufficient,
-  // error codes are not documented, various options in the GUI are not described, and the worst of all:
-  // The Software DEVELOPMENT Kit does not allow that you develop using a programming language... It is just a collection of EXE, DLL, and PDF files...
-  // Note: This C# library has only been tested with the USB Stick (PU-50n DP), not with the uSD Card (PS-45u DP).
-  // ******************************************************************
 
   /**
    * <summary>Calls methods of CardManagement.dll (part of the Swissbit Raspberry Pi Secure Boot "SDK")</summary>
    */
   class CardManagement
   {
-    // Some Error Messages collected:
-    // Return 0000 : OK
-    // Return 0008 : Generic read error, e.g. "Failed SCardTransmit"  (happens for some reason when you save 259+ bytes to NVRAM and then try to read it)
-    // Return 3790 : Happens when you save 257 bytes to NVRAM and then try to read it
-    // Return 3131 : Happens when you save 258 bytes to NVRAM and then try to read it
-    // Return 9001 : Change Protection Profile (Partition): Sum of Partition sizes is larger than total size of drive .... sometimes something else??? generic error???
-    // Return 6B00 : Happens at getPartitionTable if Firmware of Card is too old
-    // Return 6F02 : Wrong password entered or access denied
-    // Return 6F05 : No password entered, or password too short
-    // Return 6FFC : Security Settings changed; need powercycle to reload stuff
 
     // TODO: Implement activate(...)
 
@@ -162,16 +130,38 @@ namespace SwissbitSecureSDUtils
     }
     #endregion
 
-    // TODO: Implement getHashChallenge(...)
+    #region getHashChallenge
+    [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getHashChallenge", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static extern int _getHashChallenge(
+        [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+        [MarshalAs(UnmanagedType.SysInt)] IntPtr challenge);
+    public static int getHashChallenge(string deviceName, out byte[] challengeBytes)
+    {
+      int challengeSize = 32;
+      challengeBytes = new byte[challengeSize];
+      IntPtr unmanagedPointer = Marshal.AllocHGlobal(challengeSize);
+      //Marshal.Copy(challengeBytes, 0, unmanagedPointer, challengeSize);
+      int res = _getHashChallenge(deviceName, unmanagedPointer);
+      Marshal.Copy(unmanagedPointer, challengeBytes, 0, challengeSize);
+      Marshal.FreeHGlobal(unmanagedPointer);
+      return res;
+    }
+    #endregion
 
-    // TODO: Implement getLoginChallenge(...)
+    #region getLoginChallenge (Alias of getHashChallenge)
+    public static int getLoginChallenge(string deviceName, out byte[] challenge)
+    {
+      return getHashChallenge(deviceName, out challenge);
+    }
+    #endregion
 
     #region getOverallSize
     [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getOverallSize", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.U4)]
     public static extern int getOverallSize(
-        [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-        [MarshalAs(UnmanagedType.U4)] out uint OverallSize);
+          [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+          [MarshalAs(UnmanagedType.U4)] out uint OverallSize);
     #endregion
 
     #region getPartitionTable
@@ -301,11 +291,11 @@ namespace SwissbitSecureSDUtils
     [return: MarshalAs(UnmanagedType.U4)]
     private static extern int _verify(
         [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-        [MarshalAs(UnmanagedType.LPStr)] string password,
-        [MarshalAs(UnmanagedType.U4)] int passwordLength);
-    public static int verify(string deviceName, string password)
+        [MarshalAs(UnmanagedType.LPArray)] byte[] code,
+        [MarshalAs(UnmanagedType.U4)] int codeLength);
+    public static int verify(string deviceName, byte[] code)
     {
-      return _verify(deviceName, password, password.Length);
+      return _verify(deviceName, code, code.Length);
     }
     #endregion
 
@@ -377,7 +367,7 @@ namespace SwissbitSecureSDUtils
     }
   }
 
-  // TODO: Implement libsbltm.dll (from Device Manager LTM SDK)
+  // TODO: Research libsbltm.dll (from Device Manager LTM SDK)
 
   /**
    * <summary>Test program to receive various data about an attached device. It is mainly the same as the things that CardManagerCLI.exe outputs. Just working. And with LTM data.</summary>
@@ -430,147 +420,9 @@ namespace SwissbitSecureSDUtils
       Console.WriteLine("Choose DLL " + path + "\\CardManagement.dll");
       Console.WriteLine("for device '" + deviceName + "'");
 
-      // Technical foot note / interesting things:
-      //
-      // How does the uSD version of CardManagement.dll communicate with the hardware?
-      // - The communication will be done through the file X:\__communicationFile
-      //   Actually, the file can have any name. It is just important that the magic sequence is written somewhere (and the reply is read from that sector),
-      //   this is how cryptovision TSE works. However, if another file name is chosen, there seems to be some problem with files on wrong sectors. So be careful and don't do it!
-      // - In the initial state, the file has the contents:
-      //   50 4C 45 41 53 45 20 44 4F 20 4E 4F 54 20 44 45 4C 45 54 45 20 54 48 49 53 20 46 49 4C 45 21 00 ("PLEASE DO NOT DELETE THIS FILE!\n")
-      //   followed by 480 NUL bytes.
-      // - When commands are sent, the first 32 bytes are overwritten by the hardcoded magic sequence
-      //   10 6A F8 1A D6 F8 C8 70 AC 7E 85 F0 E9 9E F3 9D 1E 11 A1 BA 87 4A C6 DB 42 81 15 8E FE 6D 3C 81
-      //   After that comes command data.
-      //   A few useful dumps:     lockCard          =  01 00 00 05     FF 31 00 00  00
-      //                                                <??????> <len>( < command >  <len>( no parameters ))
-      //                           verify("test123") =  01 00 00 0D     FF 30 00 00  08     07     74 65 73 74 31 32 33
-      //                                                <??????> <len>( < command >  <len>( <len> ( t  e  s  t  1  2  3 )))
-      // - Analysis of the commands is in the table below.
-      // - How to find which data is written? Patch CardManagement.dll and replace
-      //   55 8B EC FF 75 0C E8 D5 19 00 00 FF 75 08 FF 15 C4 80 00 10 83 C4 08 33 C0 5D  with
-      //   C3 8B EC FF 75 0C E8 D5 19 00 00 FF 75 08 FF 15 C4 80 00 10 83 C4 08 33 C0 5D
-      //   This method calls Import "remove" from api-ms-win-crt-filesystem-l1-1-0.dll.
-      //   To see what is written, execute one command (only one, because the second does not work since the file is not closed)
-      //   on a drive that is NOT a secure card, for example a harddrive or normal USB stick.
-      //   To see what is returned, execute one command on the real hardware.
-      //
-      // How does the USB version of CardManagement.dll communicate with the hardware?
-      // - The SmartCard API (WinSCard.dll) is called to transmit data.
-      //   The command codes seem to be the same as for the uSD card,
-      //   because the command codes in the disassembly of the USB DLL match
-      //   the data that the uSD DLL wrote to the communcation file.
-      // - The file "<DeviceName>\__communicationFile" will be deleted. It is NOT used for transmitting data.
-      //   Note that this is non-sense because for the PU-50n, the <DeviceName> has to be a name rather than a drive letter,
-      //   so there will a file access to the local file "Swissbit Secure USB PU-50n DP 0\__communicationFile"
-      //
-      // How does the FileTunnelInterface.dll (from the TSE Maintenance Tool) communicate to the PU-50n (requires writeable drive letter though)?
-      // - It is neither SmartCard API, nor a file called __communicationFile!
-      // - ProcessMonitor shows: There are ONLY calls of CreateFile("H:"), ReadFile("H:"), WriteFile("H:") and CloseFile("H:")
-      //   Isn't this risky if FileTunnelInterface.dll would try to write to a regular drive?
-      //   I noticed: There are a LOT of Read-Accesses to offsets 0 (sector 0), 1024 (sector 2), 1536 (sector 3) before any WriteFile is called at all.
-      //   Theory: The read accesses are interpreted by a Swissbit device like a "morse code" and if the device reacts accordingly, then FileTunnelInterface.dll knows that it can now start WriteFile(),
-      //   and the device will most likely interprete these WriteFile() accesses as commands (like the TSE-IO.bin for the TSE)
-      // - FileTunnelInterface.dll from the Swissbit TSE does not work with PS-45u
-      //
-      // How does WormApi.dll communicate with the TSE?
-      // - Via the file TSE-IO.bin (to a fixed sector). It is documented in the firmware specification.
-      //
-      // How does Swissbit Device Manager and libsbltm.dll communicate with PU-50n DP?
-      // - First via the File Tunnel protocol to \Device\Harddrisk3\DR4\
-      // - Then by writing to a non-existant file "G:\sb.vc"
-      // - No Data Protection may be enabled. A PU-50n TSE cannot be detected either.
-      // How does it communicate with PS-45u?
-      // - First via the File Tunnel protocol to \Device\Harddrisk3\DR4\
-      // - Direct ReadFile access to specific sectors of drive G:\
-      //   Sector 598016   (offset 0x12400000)
-      //   Sector 1048576  (offset 0x20000000)
-      //   Sector 2097152  (offset 0x40000000)
-      //   Sector 3145728  (offset 0x60000000)
-      //   Sector 4194304  (offset 0x80000000)
-      //   For some reason, if you look at them with Hex Editor (without prior File Tunnel Interface?), you only see the string
-      //   *PROTECTED DATA*
-      // - Data Protection may be enabled
-      //
-      // What I don't know yet (TODO):
-      // - Where does the Device Manager get data like Temperature, Modell-ID, etc.? Does not seem to be in the unknown LTM data?
-
-
-      /*
-       * TODO: Implement and analyze more commands. Also find out the return data.
-       * 
-   ---------------------------------------------------------------------------------------------------------------------
-    Command DLL name                        Parameter description                Example data
-   ---------------------------------------------------------------------------------------------------------------------
-       10FF activate(dev,?,?,?,?,?)
-    20010FF activateSecure(dev,?)
-       20FF deactivate(dev,?,?)
-       30FF verify(dev,pwd) = unlock card   Password with 8 bit length prefix    01 00 00 0A FF 30 00 00 05 04 11 22 33 44
-       31FF lockCard(dev)                   None (len=0)                         01 00 00 05 FF 31 00 00 00
-       40FF changePassword(dev,?,?,?,?)
-       50FF unblockPassword(dev,?,?,?,?)
-       53FF setCdromAreaBackToDefault(dev)
-      253FF setCdromAreaAndReadException(dev,?,?)
-      353FF clearProtectionProfiles(dev)
-    10353FF setProtectionProfiles(dev,?,?)
-       ???? resetAndFormat(dev,?,?)         not yet implemented / analyzed
-       60FF reset(dev,1,?)                  not yet implemented / analyzed
-      160FF reset(dev,0,?)                  not yet implemented / analyzed
-       70FF getStatus(dev,...)              None (len=0)                         01 00 00 05 FF 70 00 00 00
-      170FF getCardId(dev,...)              None (len=0)                         01 00 00 05 FF 70 01 00 00
-      270FF getApplicationVersion(dev,...)  None (len=0)                         01 00 00 05 FF 70 02 00 00
-    10270FF getBaseFWVersion(dev,...)       None (len=0)                         01 00 00 05 FF 70 02 01 00
-      370FF getStatusNvram(dev,...)         None (len=0)                         01 00 00 05 FF 70 03 00 00
-      470FF getStatusException(dev,...)     None (len=0)                         01 00 00 05 FF 70 04 00 00
-      570FF getLoginChallenge(dev,?)        not yet implemented / analyzed
-      670FF getControllerId(dev,...)        None (len=0)                         01 00 00 05 FF 70 06 00 00
-      770FF getProtectionProfiles(dev,...)  None (len=0)                         01 00 00 05 FF 70 07 00 00
-      870FF getPartitionTable(dev,...)
-      970FF getOverallSize(dev,...)
-      380FF configureNvram(dev,?,?,?,?,?)   not yet implemented / analyzed 
-      580FF setExtendedSecurityFlags(dev,?) not yet implemented / analyzed
-      680FF setAuthenticityCheckSecret(dev,?,0), stored clear-text?
-     1680FF setAuthenticityCheckSecret(dev,?,1), store hashed?
-      780FF setSecureActivationKey(dev,?)   not yet implemented / analyzed
-       D0FF readNvram(0,c), i.e. RAM        32 byte sector count <c>             01 00 00 09 FF D0 00 00 04 00 00 00 07
-      1D0FF readNvram(1,c), i.e. cyclic     32 byte sector count <c>             01 00 00 09 FF D0 01 00 04 00 00 00 07
-       D1FF writeNvram(dev,?,0,?,0,?)       not yet implemented / analyzed
-      1D1FF writeNvram(dev,?,1,?,0,?)       not yet implemented / analyzed
-    100D1FF writeNvram(dev,?,0,?,1,?)       not yet implemented / analyzed
-    101D1FF writeNvram(dev,?,1,?,1,?)       not yet implemented / analyzed
-       F1FF challengeFirmware(dev,?,?,?)    not yet implemented / analyzed 
-       F2FF checkAuthenticity(dev,?,?)      not yet implemented / analyzed 
-      (DLL) getVersion
-      (DLL) getBuildDateAndTime
-   ---------------------------------------------------------------------------------------------------------------------
-   
-   RESPONSES
-   ---------
-
-   The first byte might be the status (0x03=finished, something else for "not ready")?
-   2nd and 3rd byte are 00. Unknown usage.
-   The 4th byte is the length of the response. Most fields are little endian.
-   The last 2 bytes of the response are the status code in big endian.
-   
-   Example 1: Reply for failed verify(), command 0x30FF:
-	03      00 00  02   6F 02
-	state?  ?????  len  response 0x6F02=wrongPassword
-   
-   Example 2: Reply for getStatus(), command 0x70FF:
-	03      00 00    11   40   02       0E    0F      00 00 00 01     00 00 FF FF FF FF   2B       90 00 
-	state?  ?????    len  lic sysstate retry soRetry  resetCounter    ????? cdRomAddr    secflag   response 0x9000=ok
-   
-    */
-
-      // NOTE: Card unlocking via verify() does only work if "Secure PIN entry" is disabled, otherwise error 6F05 (wrong password).
-      //       There seems to be some kind of challenge or additional security measurement.
-      //       It looks like there is a UUID written or read in the communication file, without any header?!
-      //       TODO: Analyze how "secure pin entry" works
-
-      // Test
-      //SecureSd_Unlock_Card(deviceName, "test123");
+      // You can unlock and lock like this:
+      //SecureSd_Unlock_Card(deviceName, "SecretPasswordHere");
       //SecureSd_Lock_Card(deviceName);
-      //return;
 
       SecureSd_DeviceInfo(deviceName);
 
@@ -634,10 +486,55 @@ namespace SwissbitSecureSDUtils
       #endregion
     }
 
+
+    private static byte[] RawSha256(byte[] rawData)
+    {
+      // Erstellen einer SHA256-Instanz
+      using (SHA256 sha256Hash = SHA256.Create())
+      {
+        // Berechnen des Hashes als Byte-Array
+        byte[] bytes = sha256Hash.ComputeHash(rawData);
+        return bytes;
+
+        // Konvertieren des Byte-Arrays in eine Hexadezimal-Zeichenkette
+        /*
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < bytes.Length; i++)
+        {
+          builder.Append(bytes[i].ToString("x2"));
+        }
+        return builder.ToString();
+        */
+      }
+    }
+
+    private static byte[] CombineArrays(byte[] first, byte[] second)
+    {
+      byte[] combined = new byte[first.Length + second.Length];
+      Buffer.BlockCopy(first, 0, combined, 0, first.Length);
+      Buffer.BlockCopy(second, 0, combined, first.Length, second.Length);
+      return combined;
+    }
+
     private static bool SecureSd_Unlock_Card(string deviceName, string password)
     {
       Console.WriteLine("Unlock Card: " + deviceName);
-      int res = CardManagement.verify(deviceName, password);
+      int res;
+      int LicMode, SysState, RetryCount, SoRetryCount, ResetCount, CdRomAddress, ExtSecurityFlags;
+      CardManagement.getStatus(deviceName, out LicMode, out SysState, out RetryCount, out SoRetryCount, out ResetCount, out CdRomAddress, out ExtSecurityFlags);
+      if ((ExtSecurityFlags & 0x10) == 0)
+      {
+        // Normal PIN entry
+        res = CardManagement.verify(deviceName, Encoding.Default.GetBytes(password)); // TODO: Password UTF-8 or ANSI?
+      }
+      else
+      {
+        // Secure PIN Entry
+        byte[] challenge;
+        CardManagement.getLoginChallenge(deviceName, out challenge); // login challenge (also called hash challenge) gets changed after each successful login
+        byte[] code = RawSha256(CombineArrays(RawSha256(Encoding.Default.GetBytes(password)), challenge)); // TODO: Password UTF-8 or ANSI?
+        res = CardManagement.verify(deviceName, code);
+      }
       if (res != 0)
       {
         Console.WriteLine("ERROR: verify() returned " + res.ToString("X4"));
@@ -918,19 +815,6 @@ namespace SwissbitSecureSDUtils
 
     private static void VendorCommandsInterfaceDeviceStatus(string driveLetter)
     {
-      // The FileTunnelInterface.dll is part of the TSE Maintenance Tool.
-      // If FileTunnelInterface.dll works on a TSE, then the TSE is considered "in an undefined state".
-      // But with a Secure SD, the FileTunnelInterface works.
-      // So, I guess both SecureSD and TSE are made out of the same "raw material",
-      // and the own differences are crypto core yes/no (DP=no, SE/PE/TSE=yes), the firmware, and possible configuration/license.
-      // The firmware and/or configuration is probably uploaded via the FileTunnelInterface (Vendor Command Interface).
-      // If FileTunnelInterface.dll works, then either the firmware was not applied in the factory,
-      // or maybe the TSE can fall back into the raw state if the firmware failed to boot (TSE Panic).
-      // But that's just a theory. Let's just enjoy that FileTunnelInterface.dll works on a SecureSD,
-      // because now we can also fetch the LTM data! The LTM data has the same structure as described
-      // in the TSE Firmware Specification.
-      // Unfortunately, FileTunnelInterface.dll does only work if there is a drive letter visible,
-      // and it does not work with CD-ROM drive letters.
 
       VendorCommandsInterface vci = new VendorCommandsInterface(driveLetter);
 

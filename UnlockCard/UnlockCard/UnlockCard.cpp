@@ -115,7 +115,9 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "umount /mnt/sdcard_comm/\n");
 		fprintf(stderr, "\n");
 #endif
-		fprintf(stderr, "Note: \"Secure PIN Entry\" must be disabled! Does not work with PU-50n DP (USB).\n");
+		fprintf(stderr, "Note: Does not work with PU-50n DP (USB).\n");
+		// TODO: Remove this note as soon as "Secure PIN Entry" is implemented.
+		fprintf(stderr, "Also, \"Secure PIN Entry\" must be disabled! Does not work with PU-50n DP (USB).\n");
 		return 2;
 	}
 
@@ -154,6 +156,7 @@ int main(int argc, char** argv) {
 	fprintf(stdout, "Retry Counter (before unlock attempt) is %d!\n", retry);
 
 	if ((data[0x12] & 0x10) != 0) {
+		// TODO: Implement "Secure PIN Entry" like this:  verify(sha256(sha256(password) + challenge)) where challenge is command 0x570FF.
 		fprintf(stderr, "You must disable \"Secure PIN Entry\" in the security settings of the device!\n");
 		return 1;
 	}
