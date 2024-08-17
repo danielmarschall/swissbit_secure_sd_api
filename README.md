@@ -171,7 +171,7 @@ __cdecl int getApplicationVersion(char* szDeviceName, int* ApplicationVersion)
    Raw data out:  03     0000 06  000000F2 9000
                   state? ???? len(appver   response)
 
-cdecl int getBaseFWVersion(char *szDeviceName, char* firmware8bytes, long* part2)
+cdecl int getBaseFWVersion(char* szDeviceName, char* firmware8bytes, long* part2)
    Purpose:       Get firmware version of the device
                   Note: Firmware8bytes is read left to right, while part2 is appended reading right to left.
                   The screenshots in the manual shows the examples "211028s9 X100" and "170614s8  110"
@@ -191,7 +191,7 @@ __cdecl int char* getBuildDateAndTime()
    Raw data in:   n/a
    Raw data out:  n/a
 
-__cdecl int getCardId(char *szDeviceName, char* cardid16bytes)
+__cdecl int getCardId(char* szDeviceName, char* cardid16bytes)
    Purpose:       Unknown. This is NOT the unique ID of the card!
    Command:       170FF
    Raw data in:   01     0000 05  FF700100 00
@@ -199,7 +199,7 @@ __cdecl int getCardId(char *szDeviceName, char* cardid16bytes)
    Raw data out:  03     0000 12  000102030405060708090A0B0C0D0E0F 9000
                   state? ???? len(cardId16bytes                    response)
 
-__cdecl int getControllerId(char *szDeviceName, char *conrollerId, int *conrollerIdSize)
+__cdecl int getControllerId(char* szDeviceName, char* conrollerId, int* conrollerIdSize)
    Purpose:       THIS is the unique ID of the card! Don't be tricked by the name...
                   The "NetPolicyServer User Manual" writes:
                               Please note the last value in the output (“Controller ID”, Figure 12). This alphanumeric sequence
@@ -215,8 +215,8 @@ __cdecl int getControllerId(char *szDeviceName, char *conrollerId, int *conrolle
    Raw data out:  03     0000 0E  000102030405060708090A0B 9000
                   state? ???? len(id12bytes                response)
 
-__cdecl int getHashChallenge(char *szDeviceName, char* challenge)
-__cdecl int getLoginChallenge(char *szDeviceName, char* challenge) // alias
+__cdecl int getHashChallenge(char* szDeviceName, char* challenge)
+__cdecl int getLoginChallenge(char* szDeviceName, char* challenge) // alias
    Purpose:       Returns a Nonce for the SHA256 Challenge–response authentication. Gets reset after each successful or failed login, or powercycle.
    Command:       570FF
    Raw data in:   01     0000 05  FF700500 00
@@ -224,26 +224,26 @@ __cdecl int getLoginChallenge(char *szDeviceName, char* challenge) // alias
    Raw data out:  03     0000 22  000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F 9000
                   state? ???? len(challenge32bytes                                                 response)
 
-__cdecl int getOverallSize(char *szDeviceName, int* OverallSize)
+__cdecl int getOverallSize(char* szDeviceName, int* OverallSize)
    Purpose:       Get memory size in units of 512 byte blocks
    Command:       970FF? 870FF?
    Raw data in:   
    Raw data out:  
 
-__cdecl int getPartitionTable(char *szDeviceName, int* PartitionTableUnknown1)
+__cdecl int getPartitionTable(char* szDeviceName, int* PartitionTableUnknown1)
    Purpose:       Unknown
    Command:       870FF
    Raw data in:   
    Raw data out:  
 
-__cdecl int getProtectionProfiles(char *szDeviceName, int* ProtectionProfileUnknown1, int* ProtectionProfileUnknown2, int* ProtectionProfileUnknown3)
+__cdecl int getProtectionProfiles(char* szDeviceName, int* ProtectionProfileUnknown1, int* ProtectionProfileUnknown2, int* ProtectionProfileUnknown3)
    Purpose:       Unknown
    Command:       770FF
    Raw data in:   01     0000 05  FF700700 00
                   state? ???? len(cmd      len())
    Raw data out:  
 
-__cdecl int getStatus(char *szDeviceName, int* LicenseMode, int* SystemState, int* RetryCounter, int* SoRetryCounter, int* ResetCounter, int* CdRomAddress, int* ExtSecurityFlags)
+__cdecl int getStatus(char* szDeviceName, int* LicenseMode, int* SystemState, int* RetryCounter, int* SoRetryCounter, int* ResetCounter, int* CdRomAddress, int* ExtSecurityFlags)
    Purpose:       Get information about the current state of the device
                   License Mode   = PU-50n DP and PS-45u Raspberry Pi Edition = 0x40. What else is possible?
                                    CardManager.exe : If License Mode is equal to 0x20, then "Extended Security Flags" are not shown in the "Device Status" dialog, also getStatusException() is not called.
@@ -270,14 +270,14 @@ __cdecl int getStatus(char *szDeviceName, int* LicenseMode, int* SystemState, in
    Raw data out:  03     0000 11  40  02       0E    0F      00000001     0000 FFFFFFFF  2B      9000
                   state? ???? len(lic sysstate retry soRetry resetCounter ???? cdRomAddr secflag response)
 
-__cdecl int getStatusException(char *szDeviceName, int* ExceptionUnknown1, int* ExceptionUnknown2, int* ExceptionUnknown3, int* partition1Offset, int* ExceptionUnknown4)
+__cdecl int getStatusException(char* szDeviceName, int* ExceptionUnknown1, int* ExceptionUnknown2, int* ExceptionUnknown3, int* partition1Offset, int* ExceptionUnknown4)
    Purpose:       Unknown
    Command:       470FF
    Raw data in:   01     0000 05  FF700400 00
                   state? ???? len(cmd      len())
    Raw data out:  
 
-__cdecl int getStatusNvram(char *szDeviceName, int* AccessRights, int* TotalNvRamSize, int* RandomAccessSectors, int* CyclicAccessSectors, int* NextCyclicWrite)
+__cdecl int getStatusNvram(char* szDeviceName, int* AccessRights, int* TotalNvRamSize, int* RandomAccessSectors, int* CyclicAccessSectors, int* NextCyclicWrite)
    Purpose:       Get NVRAM configuration
                   Returned AccessRights = CyclicRights || RandomRights
                   CyclicRights and RandomRights are a flag byte containing:
@@ -301,14 +301,14 @@ __cdecl int getVersion()
    Raw data in:   n/a
    Raw data out:  n/a
 
-__cdecl int lockCard(char *szDeviceName)
+__cdecl int lockCard(char* szDeviceName)
    Purpose:       Locks data protection
    Command:       31FF
    Raw data in:   01     0000 05  FF310000  00
                   state? ???? len(cmd       len())
    Raw data out:  
 
-__cdecl int readNvram(char *szDeviceName, char* value, int valueLength, byte isCyclic, int sectorNumber)
+__cdecl int readNvram(char* szDeviceName, char* value, int valueLength, byte isCyclic, int sectorNumber)
    Purpose:       Reads NVRAM data
    Command:        D0FF if isCyclic=0
                   1D0FF if isCyclic=1
@@ -317,12 +317,12 @@ __cdecl int readNvram(char *szDeviceName, char* value, int valueLength, byte isC
    Raw data out:  03     0000 08  666F6F626172 9000
                   state? ???? len(contents     response)
 
-__cdecl int reset(dev,soCode,soCodeLength)
+__cdecl int reset(char* szDeviceName, char* soCode, int soCodeLength)
    Purpose:       Resets the device.
                   If Secure Pin Entry is enabled, soCode must be a hash, see verify().
                   Otherwise soCode is the plaintext Security Officer password.
    Command:          60FF reset without password
-                 10060FF reset with password
+                  10060FF reset with password
    Raw data in:   
    Raw data out:  
 
@@ -352,7 +352,7 @@ __cdecl int setCdromAreaBackToDefault(char* szDeviceName)
    Raw data in:   
    Raw data out:  
 
-__cdecl int setExtendedSecurityFlags(char *szDeviceName, int newFlags)
+__cdecl int setExtendedSecurityFlags(char* szDeviceName, int newFlags)
    Purpose:       Sets extended security flags
    Command:       580FF
    Raw data in:   
@@ -376,7 +376,7 @@ __cdecl int unblockPassword(dev,?,?,?,?)
    Raw data in:   
    Raw data out:  
 
-__cdecl int verify(char *szDeviceName, char* code, int codeLength)
+__cdecl int verify(char* szDeviceName, char* code, int codeLength)
    Purpose:       Unlocks data protection
                   If Extended Security Flag 0x10 (Secure PIN Entry) is set, then code=sha256(sha256(password)+challenge)
                   where challenge comes from getHashChallenge(), which gets changed after each successful or failed login, or powercycle.
@@ -387,7 +387,7 @@ __cdecl int verify(char *szDeviceName, char* code, int codeLength)
    Raw data out:  03     0000 02  9000
                   state? ???? len(response)
 
-__cdecl int writeNvram(char *szDeviceName, char* data, int dataLength, byte isCycle, byte isAppend, int sector)
+__cdecl int writeNvram(char* szDeviceName, char* data, int dataLength, byte isCycle, byte isAppend, int sector)
    Purpose:       Writes NVRAM. Note that isCycle and isAppend only read the lower 8 bits (00h or 01h). CardManager.exe sends an U4 with garbage in the upper bits.
    Command:          D1FF if isCycle=0 and isAppend=0
                     1D1FF if isCycle=1 and isAppend=0
