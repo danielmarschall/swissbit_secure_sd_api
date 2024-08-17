@@ -129,7 +129,7 @@ __cdecl int challengeFirmware(dev,?,?,?)
 
 __cdecl int changePassword(dev,?,?,?,?)
    Purpose:       Changes the password (which?)
-	                Attention: If Secure PIN Entry is enabled, then code needs to be a hash (see verify())
+                  Attention: If Secure PIN Entry is enabled, then code needs to be a hash (see verify())
    Command:       40FF
    Raw data in:   
    Raw data out:  
@@ -148,16 +148,16 @@ __cdecl int clearProtectionProfiles(char* szDeviceName)
 
 __cdecl int configureNvram(char* szDeviceName, int ramRights, int camRights, int ramSize, int camSize, int camNext???)
    Purpose:       Configures the NVRAM of the device
-	                Note: I am not sure about the last parameter. It is always 0 if I use the Device Manager. It is probably CAM next cycle.
-									Also, if I check "Fuse Peristently", the ram/camRights are still the same. Shouldn't flag 0x80 be set? I don't want to try it, so I stopped the debugger at that point. Seems to be a bug in CardManager.exe
+                  Note: I am not sure about the last parameter. It is always 0 if I use the Device Manager. It is probably CAM next cycle.
+                  Also, if I check "Fuse Peristently", the ram/camRights are still the same. Shouldn't flag 0x80 be set? I don't want to try it, so I stopped the debugger at that point. Seems to be a bug in CardManager.exe
    Command:       380FF
    Raw data in:   
    Raw data out:  
 
 __cdecl int deactivate(char* szDeviceName, char* soCode, int soCodeLength)
    Purpose:       Disable Data Protection
-	                If Secure Pin Entry is enabled, soCode must be a hash, see verify().
-									Otherwise soCode is the plaintext Security Officer password.
+                  If Secure Pin Entry is enabled, soCode must be a hash, see verify().
+                  Otherwise soCode is the plaintext Security Officer password.
    Command:       20FF
    Raw data in:   
    Raw data out:  
@@ -319,10 +319,10 @@ __cdecl int readNvram(char *szDeviceName, char* value, int valueLength, byte isC
 
 __cdecl int reset(dev,soCode,soCodeLength)
    Purpose:       Resets the device.
-	                If Secure Pin Entry is enabled, soCode must be a hash, see verify().
-									Otherwise soCode is the plaintext Security Officer password.
+                  If Secure Pin Entry is enabled, soCode must be a hash, see verify().
+                  Otherwise soCode is the plaintext Security Officer password.
    Command:          60FF reset without password
-	                10060FF reset with password
+                 10060FF reset with password
    Raw data in:   
    Raw data out:  
 
@@ -334,7 +334,7 @@ __cdecl int resetAndFormat(dev,?,?)
 
 __cdecl int setAuthenticityCheckSecret(char* szDeviceName, char* data32byte, int unknown)
    Purpose:       Sets "authenticity secret".
-	                CardManager 4.0 stores the result hashed (SHA256). CardManager 4.1 allows plain text storing, but the plain text must be 32 bytes. Value unknown is always set to 0 in CardManager 4.0 and 4.1.
+                  CardManager 4.0 stores the result hashed (SHA256). CardManager 4.1 allows plain text storing, but the plain text must be 32 bytes. Value unknown is always set to 0 in CardManager 4.0 and 4.1.
    Command:        680FF if unknown=0
                   1680FF if unknown=1
    Raw data in:   
