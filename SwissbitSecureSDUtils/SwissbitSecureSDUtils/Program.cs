@@ -28,17 +28,26 @@ namespace SwissbitSecureSDUtils
     }
     #endregion
 
-    // TODO: Implement activateSecure(...)
+    // TODO: Implement activateSecure(dev,?)
 
-    // TODO: Implement challengeFirmware(...)
+    // TODO: Implement challengeFirmware(dev,?,?,?)
 
-    // TODO: Implement changePassword(...)
+    // TODO: Implement changePassword(dev,?,?,?,?)
+    // Attention: If Secure PIN Entry is enabled, then code needs to be a hash
 
-    // TODO: Implement checkAuthenticity(...)
+    // TODO: Implement checkAuthenticity(dev,?,?)
 
-    // TODO: Implement clearProtectionProfiles(...)
-
-    // TODO: Implement configureNvram(...)
+    #region clearProtectionProfiles
+    [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "clearProtectionProfiles", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static extern int _clearProtectionProfiles(
+        [MarshalAs(UnmanagedType.LPStr)] string deviceName
+        );
+    public static int clearProtectionProfiles(string deviceName)
+    {
+      return _clearProtectionProfiles(deviceName);
+    }
+    #endregion
 
     #region configureNvram
     [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "configureNvram", CallingConvention = CallingConvention.Cdecl)]
@@ -62,12 +71,13 @@ namespace SwissbitSecureSDUtils
     [return: MarshalAs(UnmanagedType.U4)]
     private static extern int _deactivate(
         [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-        [MarshalAs(UnmanagedType.LPArray)] byte[] soPassword,
-        [MarshalAs(UnmanagedType.U4)] int soPasswordLength
+        [MarshalAs(UnmanagedType.LPArray)] byte[] soCode,
+        [MarshalAs(UnmanagedType.U4)] int soCodeLength
         );
-    public static int deactivate(string deviceName, byte[] soPassword)
+    public static int deactivate(string deviceName, byte[] soCode)
     {
-      return _deactivate(deviceName, soPassword, soPassword.Length);
+      // Attention: If Secure PIN Entry is enabled, then code needs to be a hash
+      return _deactivate(deviceName, soCode, soCode.Length);
     }
     #endregion
 
@@ -307,15 +317,64 @@ namespace SwissbitSecureSDUtils
     }
     #endregion
 
-    // TODO: Implement reset(...)
+    #region reset
+    [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "reset", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static extern int _reset(
+        [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+        [MarshalAs(UnmanagedType.LPArray)] byte[]? soCode,
+        [MarshalAs(UnmanagedType.U4)] int soCodeLength);
+    public static int reset(string deviceName, byte[] soCode)
+    {
+      if (soCode.Length == 0)
+      {
+        return _reset(deviceName, null, 0);
+      }
+      else
+      {
+        // Attention: If Secure PIN Entry is enabled, then code needs to be a hash
+        return _reset(deviceName, soCode, soCode.Length);
+      }
+    }
+    #endregion
 
-    // TODO: Implement resetAndFormat(...)
+    // TODO: Implement resetAndFormat(dev,?,?)
 
-    // TODO: Implement setAuthenticityCheckSecret(...)
+    #region setAuthenticityCheckSecret
+    [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "setAuthenticityCheckSecret", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static extern int _setAuthenticityCheckSecret(
+        [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+        [MarshalAs(UnmanagedType.LPArray)] byte[] data32byte,
+        [MarshalAs(UnmanagedType.U1)] byte unknown
+        );
+    public static int setAuthenticityCheckSecret(string deviceName, byte[] data32byte, bool storeHashed, bool unknown)
+    {
+      if (storeHashed)
+      {
+        data32byte = SHA256.Create().ComputeHash(data32byte);
+      }
+      else
+      {
+        if (data32byte.Length != 32) throw new Exception("Plaintext secret must have a size of 32 bytes.");
+      }
+      return _setAuthenticityCheckSecret(deviceName, data32byte, (byte)(unknown ? 0 : 1));
+    }
+    #endregion
 
-    // TODO: Implement setCdromAreaAndReadException(...)
+    // TODO: Implement setCdromAreaAndReadException(dev,?,?)
 
-    // TODO: Implement setCdromAreaBackToDefault(...)
+    #region setCdromAreaBackToDefault
+    [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "setCdromAreaBackToDefault", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static extern int _setCdromAreaBackToDefault(
+        [MarshalAs(UnmanagedType.LPStr)] string deviceName
+        );
+    public static int setCdromAreaBackToDefault(string deviceName)
+    {
+      return _setCdromAreaBackToDefault(deviceName);
+    }
+    #endregion
 
     #region setExtendedSecurityFlags
     [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "setExtendedSecurityFlags", CallingConvention = CallingConvention.Cdecl)]
@@ -329,11 +388,11 @@ namespace SwissbitSecureSDUtils
     }
     #endregion
 
-    // TODO: Implement setProtectionProfiles(...)
+    // TODO: Implement setProtectionProfiles(dev,?,?)
 
-    // TODO: Implement setSecureActivationKey(...)
+    // TODO: Implement setSecureActivationKey(dev,?)
 
-    // TODO: Implement unblockPassword(...)
+    // TODO: Implement unblockPassword(dev,?,?,?,?)
 
     #region verify (Unlock Data Protection)
     [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "verify", CallingConvention = CallingConvention.Cdecl)]
@@ -344,6 +403,7 @@ namespace SwissbitSecureSDUtils
         [MarshalAs(UnmanagedType.U4)] int codeLength);
     public static int verify(string deviceName, byte[] code)
     {
+      // Attention: If Secure PIN Entry is enabled, then code needs to be a hash
       return _verify(deviceName, code, code.Length);
     }
     #endregion
@@ -361,7 +421,7 @@ namespace SwissbitSecureSDUtils
         );
     public static int writeNvram(string deviceName, byte[] data, bool isCycle, bool isAppend, int sector)
     {
-      return _writeNvram(deviceName, data, data.Length, (byte)(isCycle?1:0), (byte)(isAppend?1:0), sector);
+      return _writeNvram(deviceName, data, data.Length, (byte)(isCycle ? 1 : 0), (byte)(isAppend ? 1 : 0), sector);
     }
     #endregion
 
@@ -490,7 +550,6 @@ namespace SwissbitSecureSDUtils
       //SecureSd_Lock_Card(deviceName);
       //CardManagement.writeNvram(deviceName, Encoding.Default.GetBytes("Hello World"), false, false, 0);
 
-
       SecureSd_DeviceInfo(deviceName);
 
       #region Try to find a writeable driveletter in order to call FileTunnelInterface (identify using Unique Chip ID)
@@ -553,28 +612,6 @@ namespace SwissbitSecureSDUtils
       #endregion
     }
 
-
-    private static byte[] RawSha256(byte[] rawData)
-    {
-      // Erstellen einer SHA256-Instanz
-      using (SHA256 sha256Hash = SHA256.Create())
-      {
-        // Berechnen des Hashes als Byte-Array
-        byte[] bytes = sha256Hash.ComputeHash(rawData);
-        return bytes;
-
-        // Konvertieren des Byte-Arrays in eine Hexadezimal-Zeichenkette
-        /*
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < bytes.Length; i++)
-        {
-          builder.Append(bytes[i].ToString("x2"));
-        }
-        return builder.ToString();
-        */
-      }
-    }
-
     private static byte[] CombineArrays(byte[] first, byte[] second)
     {
       byte[] combined = new byte[first.Length + second.Length];
@@ -583,25 +620,64 @@ namespace SwissbitSecureSDUtils
       return combined;
     }
 
-    private static bool SecureSd_Unlock_Card(string deviceName, string password)
+    private static byte[] HashPasswordIfRequired(string deviceName, string password)
     {
-      Console.WriteLine("Unlock Card: " + deviceName);
-      int res;
       int LicMode, SysState, RetryCount, SoRetryCount, ResetCount, CdRomAddress, ExtSecurityFlags;
       CardManagement.getStatus(deviceName, out LicMode, out SysState, out RetryCount, out SoRetryCount, out ResetCount, out CdRomAddress, out ExtSecurityFlags);
       if ((ExtSecurityFlags & 0x10) == 0)
       {
         // Normal PIN entry
-        res = CardManagement.verify(deviceName, Encoding.Default.GetBytes(password)); // TODO: Password UTF-8 or ANSI?
+        return Encoding.Default.GetBytes(password); // TODO: Password UTF-8 or ANSI?
       }
       else
       {
         // Secure PIN Entry
         byte[] challenge;
         CardManagement.getLoginChallenge(deviceName, out challenge); // login challenge (also called hash challenge) gets changed after each successful or failed login, or powercycle
-        byte[] code = RawSha256(CombineArrays(RawSha256(Encoding.Default.GetBytes(password)), challenge)); // TODO: Password UTF-8 or ANSI?
-        res = CardManagement.verify(deviceName, code);
+        return SHA256.Create().ComputeHash(CombineArrays(SHA256.Create().ComputeHash(Encoding.Default.GetBytes(password)), challenge)); // TODO: Password UTF-8 or ANSI?
       }
+    }
+
+    public static bool SecureSd_Deactivate_DataProtection(string deviceName, string soPassword)
+    {
+      Console.WriteLine("Disable Data Protection for " + deviceName);
+      int res = CardManagement.deactivate(deviceName, HashPasswordIfRequired(deviceName, soPassword));
+      if (res != 0)
+      {
+        Console.WriteLine("ERROR: deactivate() returned " + res.ToString("X4"));
+      }
+      return res == 0;
+    }
+
+    /**
+     * ATTENTION: THIS METHOD MAY BREAK YOUR DEVICE! IT IS NOT TESTED!
+     **/
+    public static bool SecureSd_Activate_DataProtection(string deviceName, string password, string soPassword, int retryCounter)
+    {
+      Console.WriteLine("Enable Data Protection for " + deviceName);
+      int res = CardManagement.activate(deviceName, Encoding.Default.GetBytes(password), Encoding.Default.GetBytes(soPassword), retryCounter);
+      if (res != 0)
+      {
+        Console.WriteLine("ERROR: deactivate() returned " + res.ToString("X4"));
+      }
+      return res == 0;
+    }
+
+    public static bool SecureSd_Reset_Card(string deviceName, string soPassword)
+    {
+      Console.WriteLine("Reset Card: " + deviceName);
+      int res = CardManagement.reset(deviceName, HashPasswordIfRequired(deviceName, soPassword));
+      if (res != 0)
+      {
+        Console.WriteLine("ERROR: reset() returned " + res.ToString("X4"));
+      }
+      return res == 0;
+    }
+
+    public static bool SecureSd_Unlock_Card(string deviceName, string password)
+    {
+      Console.WriteLine("Unlock Card: " + deviceName);
+      int res = CardManagement.verify(deviceName, HashPasswordIfRequired(deviceName, password));
       if (res != 0)
       {
         Console.WriteLine("ERROR: verify() returned " + res.ToString("X4"));
@@ -609,7 +685,7 @@ namespace SwissbitSecureSDUtils
       return res == 0;
     }
 
-    private static bool SecureSd_Lock_Card(string deviceName)
+    public static bool SecureSd_Lock_Card(string deviceName)
     {
       Console.WriteLine("Lock Card: " + deviceName);
       int res = CardManagement.lockCard(deviceName);
@@ -620,7 +696,7 @@ namespace SwissbitSecureSDUtils
       return res == 0;
     }
 
-    private static void SecureSd_DeviceInfo(string deviceName)
+    public static void SecureSd_DeviceInfo(string deviceName)
     {
       #region DLL Version
       int dllVersion = CardManagement.getVersion();
@@ -786,8 +862,8 @@ namespace SwissbitSecureSDUtils
       #endregion
       */
 
-      #region getStatusNvram()
-      int NvramAccessRights, NvramTotalNvramSize, NvramRandomAccessSectors, NvramCyclicAccessSectors, NextCyclicWrite;
+    #region getStatusNvram()
+    int NvramAccessRights, NvramTotalNvramSize, NvramRandomAccessSectors, NvramCyclicAccessSectors, NextCyclicWrite;
       res = CardManagement.getStatusNvram(deviceName, out NvramAccessRights, out NvramTotalNvramSize, out NvramRandomAccessSectors, out NvramCyclicAccessSectors, out NextCyclicWrite);
       Console.WriteLine("***** CardManagement.dll getStatusNvram() returns: 0x" + res.ToString("X4"));
       if (res == 0)
@@ -881,7 +957,7 @@ namespace SwissbitSecureSDUtils
       return;
     }
 
-    private static void VendorCommandsInterfaceDeviceStatus(string driveLetter)
+    public static void VendorCommandsInterfaceDeviceStatus(string driveLetter)
     {
 
       VendorCommandsInterface vci = new VendorCommandsInterface(driveLetter);

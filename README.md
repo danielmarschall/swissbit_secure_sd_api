@@ -129,6 +129,7 @@ __cdecl int challengeFirmware(dev,?,?,?)
 
 __cdecl int changePassword(dev,?,?,?,?)
    Purpose:       Changes the password (which?)
+	                Attention: If Secure PIN Entry is enabled, then code needs to be a hash (see verify())
    Command:       40FF
    Raw data in:   
    Raw data out:  
@@ -139,7 +140,7 @@ __cdecl int checkAuthenticity(dev,?,?)
    Raw data in:   
    Raw data out:  
 
-__cdecl int clearProtectionProfiles(dev)
+__cdecl int clearProtectionProfiles(char* szDeviceName)
    Purpose:       Unknown
    Command:       353FF
    Raw data in:   
@@ -153,8 +154,10 @@ __cdecl int configureNvram(char* szDeviceName, int ramRights, int camRights, int
    Raw data in:   
    Raw data out:  
 
-__cdecl int deactivate(char* szDeviceName, char* soPassword, int soPasswordLength)
+__cdecl int deactivate(char* szDeviceName, char* soCode, int soCodeLength)
    Purpose:       Disable Data Protection
+	                If Secure Pin Entry is enabled, soCode must be a hash, see verify().
+									Otherwise soCode is the plaintext Security Officer password.
    Command:       20FF
    Raw data in:   
    Raw data out:  
@@ -314,10 +317,12 @@ __cdecl int readNvram(char *szDeviceName, char* value, int valueLength, byte isC
    Raw data out:  03     0000 08  666F6F626172 9000
                   state? ???? len(contents     response)
 
-__cdecl int reset(dev,unk,?)
-   Purpose:       Resets the device
-   Command:        60FF if unk=1
-	                160FF if unk=0
+__cdecl int reset(dev,soCode,soCodeLength)
+   Purpose:       Resets the device.
+	                If Secure Pin Entry is enabled, soCode must be a hash, see verify().
+									Otherwise soCode is the plaintext Security Officer password.
+   Command:          60FF reset without password
+	                10060FF reset with password
    Raw data in:   
    Raw data out:  
 
@@ -327,10 +332,11 @@ __cdecl int resetAndFormat(dev,?,?)
    Raw data in:   
    Raw data out:  
 
-__cdecl int setAuthenticityCheckSecret(dev,?,unk)
-   Purpose:       Unknown
-   Command:        680FF if unk=0 (store cleartext?)
-                  1680FF if unk=1 (store hashed?)
+__cdecl int setAuthenticityCheckSecret(char* szDeviceName, char* data32byte, int unknown)
+   Purpose:       Sets "authenticity secret".
+	                CardManager 4.0 stores the result hashed (SHA256). CardManager 4.1 allows plain text storing, but the plain text must be 32 bytes. Value unknown is always set to 0 in CardManager 4.0 and 4.1.
+   Command:        680FF if unknown=0
+                  1680FF if unknown=1
    Raw data in:   
    Raw data out:  
 
@@ -340,7 +346,7 @@ __cdecl int setCdromAreaAndReadException(dev,?,?)
    Raw data in:   
    Raw data out:  
 
-__cdecl int setCdromAreaBackToDefault(dev)
+__cdecl int setCdromAreaBackToDefault(char* szDeviceName)
    Purpose:       Unknown
    Command:       53FF
    Raw data in:   
@@ -410,9 +416,11 @@ so this seems to be a bug in CardManger.exe and not a bug in the firmware.
 
 ### Possible bug with Fused NVRAM
 
-The option `Fuse Persistently` at Card Manager does not seem to do anything.
-In the disassembly, 13 checkboxes are evaluated, not 14.
+The option `Fuse Persistently` at Card Manager 4.0 (SD) does not seem to do anything.
+In the disassembly of version 4.0 (SD), 13 checkboxes are evaluated, not 14.
 The arguments to `configurateNvram()` in the stack trace are unchanged if this checkbox is checked.
+
+Version 4.1 (SD) checks 14 checkboxes, but I don't understand what the 64bit disassembly does (there is no 0x80 flag stuff there), and I don't want to test it with my device.
 
 ### How does the uSD version of CardManagement.dll communicate with the hardware?
 
@@ -532,8 +540,8 @@ Looking at the disassembly, the SmartCard API seems to use the same commands, bu
       353FF clearProtectionProfiles(dev)
     10353FF setProtectionProfiles(dev,?,?)
        ???? resetAndFormat(dev,?,?)         not yet implemented / analyzed
-       60FF reset(dev,1,?)                  not yet implemented / analyzed
-      160FF reset(dev,0,?)                  not yet implemented / analyzed
+       60FF reset(dev,null,0)               not yet implemented / analyzed
+    10060FF reset(dev,password,passwordLen) not yet implemented / analyzed
        70FF getStatus(dev,...)              None (len=0)                         01 00 00 05 FF 70 00 00 00
       170FF getCardId(dev,...)              None (len=0)                         01 00 00 05 FF 70 01 00 00
       270FF getApplicationVersion(dev,...)  None (len=0)                         01 00 00 05 FF 70 02 00 00
