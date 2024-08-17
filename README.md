@@ -87,10 +87,11 @@ Locking the card is done via `lockCard()` method in CardManagement.dll.
 Some Error Messages collected:
 
 ```
-Return 0000 : OK
+Return 0000 : OK (the DLL returns this, but the actual response code is 0x9000)
 Return 0008 : Generic read error, e.g. "Failed SCardTransmit"  (happens for some reason when you save 259+ bytes to NVRAM and then try to read it)
 Return 3790 : Happens when you save 257 bytes to NVRAM and then try to read it
 Return 3131 : Happens when you save 258 bytes to NVRAM and then try to read it
+Return 6700 : Message invalid (e.g. wrong length)
 Return 6B00 : Happens at getPartitionTable if Firmware of Card is too old
 Return 6F02 : Wrong password entered or access denied
 Return 6F05 : No password entered, or password too short
@@ -158,20 +159,26 @@ cdecl deactivate(dev,?,?)
 
 cdecl int getApplicationVersion(string deviceName, out int ApplicationVersion)
    Purpose:       In the binary it can be seen that it also seems to be called "CFE version". Also funny typos: "Yor CFE version is" and "You must be loged in to read the partition table".
+                  My SD card (PS-45u DP) has F2.
    Command:       270FF
    Raw data in:   01     0000  05  FF700200 00
                   state? ????? len(cmd      len())
-   Raw data out:  
+   Raw data out:  03     0000 06  000000F2 9000
+                  state? ???? len(appver   response)
 
 cdecl int getBaseFWVersion(string deviceName, IntPtr firmware8bytes, ref int part2)
    Purpose:       Get firmware version of the device
                   Note: Firmware8bytes is read left to right, while part2 is appended reading right to left.
                   The screenshots in the manual shows the examples "211028s9 X100" and "170614s8  110"
                   My USB device (PU-50n DP) has "180912u9  106" but showns in the Swissbit Device Manager as "180912 1.06"
+                  My SD card (PS-45u DP) has "170614s8  105"
+                  The firmwareid in the raw data is "170614s8 105" (only 1 whitespace),
+                  while the DLL returns part1="170614s8 " and part2=' 501'. Note the two whitespaces...
    Command:       10270FF
    Raw data in:   01     0000 05  FF700201 00
                   state? ???? len(cmd      len())
-   Raw data out:  
+   Raw data out:  03     0000 0E  313730363134733820313035 9000
+                  state? ???? len(firmwareid               response)
 
 cdecl char* getBuildDateAndTime()
    Purpose:       Shows the version of the DLL. Does not contact the device. Only for 2019 USB/uSD DLL, not for 2022 uSD DLL.
@@ -179,12 +186,13 @@ cdecl char* getBuildDateAndTime()
    Raw data in:   n/a
    Raw data out:  n/a
 
-cdecl int getCardId(string deviceName, IntPtr cardid12bytes)
+cdecl int getCardId(string deviceName, IntPtr cardid)
    Purpose:       Unknown. This is NOT the unique ID of the card!
    Command:       170FF
    Raw data in:   01     0000 05  FF700100 00
                   state? ???? len(cmd      len())
-   Raw data out:  
+   Raw data out:  03     0000 12  000102030405060708090A0B0C0D0E0F 9000
+                  state? ???? len(cardId                           response)
 
 cdecl int getControllerId(string deviceName, IntPtr conrollerId, ref int conrollerIdSize)
    Purpose:       THIS is the unique ID of the card! Don't be tricked by the name...
@@ -199,7 +207,8 @@ cdecl int getControllerId(string deviceName, IntPtr conrollerId, ref int conroll
    Command:       670FF
    Raw data in:   01     0000 05  FF700600 00
                   state? ???? len(cmd      len())
-   Raw data out:  
+   Raw data out:  03     0000 0E  000102030405060708090A0B 9000
+                  state? ???? len(id12bytes                response)
 
 cdecl int getHashChallenge(string deviceName, IntPtr challenge)
 cdecl int getLoginChallenge(string deviceName, IntPtr challenge) // alias
@@ -207,12 +216,12 @@ cdecl int getLoginChallenge(string deviceName, IntPtr challenge) // alias
    Command:       570FF
    Raw data in:   01     0000 05  FF700500 00
                   state? ???? len(cmd      len())
-   Raw data out:  03     0000 11  000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F 9000 
+   Raw data out:  03     0000 22  000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F 9000
                   state? ???? len(challenge32bytes                                                 response)
 
 cdecl int getOverallSize(string deviceName, out uint OverallSize)
    Purpose:       Get memory size in units of 512 byte blocks
-   Command:       970FF
+   Command:       970FF? 870FF?
    Raw data in:   
    Raw data out:  
 
@@ -253,7 +262,7 @@ cdecl int getStatus(string deviceName, out int LicenseMode, out int SystemState,
    Command:       70FF
    Raw data in:   01     0000 05  FF700000 00
                   state? ???? len(cmd      len())
-   Raw data out:  03     0000 11  40  02       0E    0F      00000001      0000 FFFFFFFF  2B      9000 
+   Raw data out:  03     0000 11  40  02       0E    0F      00000001      0000 FFFFFFFF  2B      9000
                   state? ???? len(lic sysstate retry soRetry resetCounter  ???? cdRomAddr secflag response )
 
 cdecl int getStatusException(string deviceName, out int ExceptionUnknown1, out int ExceptionUnknown2, out int ExceptionUnknown3, out int partition1Offset, out int ExceptionUnknown4)
@@ -278,7 +287,8 @@ cdecl int getStatusNvram(string deviceName, out int AccessRights, out int TotalN
    Command:       370FF
    Raw data in:   01     0000 05  FF700300 00
                   state? ???? len(cmd      len())
-   Raw data out:  
+   Raw data out:  03     0000 15  00000007  10           1F     00000003 00000002 00000001 00 9000
+                  state? ???? len(totalsize ramRights camRights ramSize  camSize  camNext  ?? response)
 
 cdecl int getVersion()
    Purpose:       DLL only version, no device contact.
@@ -299,7 +309,8 @@ cdecl int readNvram(string deviceName, IntPtr value, ref int valueLength, bool c
                   1D0FF if cyclic=1
    Raw data in:   01     0000 09  FFD00100 04  00000007
                   state? ???? len(cmd cy   len(sector  ))
-   Raw data out:  
+   Raw data out:  03     0000 08  666F6F626172 9000
+                  state? ???? len(contents     response)
 
 cdecl reset(dev,unk,?)
    Purpose:       Resets the device
@@ -362,19 +373,36 @@ cdecl int verify(string deviceName, byte[] code, int codeLength)
                   where challenge comes from getHashChallenge(), which gets changed after each successful or failed login, or powercycle.
                   If Secure PIN Entry is disabled, then code=password.
    Command:       30FF
-   Raw data in:   01     0000 0A  FF300000 05  0411223344
+   Raw data in:   01     0000 0A  FF300000 05  1122334455
                   state? ???? len(cmd      len(code      ))
-   Raw data out:  
+   Raw data out:  03     0000 02  9000
+                  state? ???? len(response)
 
-cdecl writeNvram(dev,?,unk1,?,unk2,?)
+cdecl writeNvram(dev,?,cyclic,?,append,?)
    Purpose:       Writes NVRAM
-   Command:          D1FF if unk1=0 and unk2=0
-                    1D1FF if unk1=1 and unk2=0
-                  100D1FF if unk1=0 and unk2=1
-                  101D1FF if unk1=1 and unk2=1
-   Raw data in:   
-   Raw data out:  
+   Command:          D1FF if cyclic=0 and append=0
+                    1D1FF if cyclic=1 and append=0
+                  100D1FF if cyclic=0 and append=1
+                  101D1FF if cyclic=1 and append=1
+   Raw data in:   For RAM:
+                  01     0000 0A  FF30 00 00 09  00000001 1122334455
+                  state? ???? len(cmd  cy ap len(sector   data      ))
+                  For CAM:
+                  01     0000 0A  FF30 01 00 05  1122334455
+                  state? ???? len(cmd  cy ap len(data      ))
+   Raw data out:  03     0000 02  9000
+                  state? ???? len(response)
 ```
+### Possible bug with Cyclic NVRAM
+
+I'm not sure if I did something wrong, or if CardManager.exe has a bug!
+
+In Cyclic Access Memory: I write something (e.g. "foo") in sector 0 and commit it,
+then I click "Select New" (sector 1 gets selected), then I write something else (e.g. "bar") to the new sector, and also commit this.
+But when I re-open the Cyclic Access Dialog, every input is combined in sector 0 (i.e. "foobar") and all other sectors are empty.
+`getStatusNvram()` shows Next Cyclic Write 0x0.  And `readNvram()` shows everything in Cyclic sector 0.
+By using `writeNvram()` you can create a state where Next Cyclic Write > 0,
+so this seems to be a bug in CardManger.exe and not a bug in the firmware.
 
 ### How does the uSD version of CardManagement.dll communicate with the hardware?
 
@@ -553,3 +581,5 @@ Use this API for private use only.
 If you need this API commercially, please
 search legal advice if this API may be used
 (It's okay for me, but I am not sure about Swissbit).
+I am not responsible for any legal issues or consequences
+that may arise from the use of this information.

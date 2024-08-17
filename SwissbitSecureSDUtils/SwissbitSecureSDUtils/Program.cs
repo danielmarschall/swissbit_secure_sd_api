@@ -84,7 +84,7 @@ namespace SwissbitSecureSDUtils
     [return: MarshalAs(UnmanagedType.U4)]
     private static extern int _getCardId(
         [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-        [MarshalAs(UnmanagedType.SysInt)] IntPtr cardid12bytes);
+        [MarshalAs(UnmanagedType.SysInt)] IntPtr cardid16bytes);
     public static int getCardId(string deviceName, out string cardId)
     {
       int cardIdSize = 16;
@@ -766,9 +766,10 @@ namespace SwissbitSecureSDUtils
 
       if (res == 0)
       {
-        // TODO: I'm not sure if I did something wrong, or if CardManager.exe has a bug.
-        //       In Cyclic Access Memory: I write something in sector 0, then I click "Select New" (sector 1 gets selected), then I write something to the new sector.
-        //       But after I commit and re-open the Cyclic Access Dialog, every input is combined in sector 0 and all other sectors are empty.
+        // TODO: I'm not sure if I did something wrong, or if CardManager.exe has a bug!
+        //       In Cyclic Access Memory: I write something (e.g. "foo") in sector 0 and commit it,
+        //       then I click "Select New" (sector 1 gets selected), then I write something else (e.g. "bar") to the new sector, and also commit this.
+        //       But when I re-open the Cyclic Access Dialog, every input is combined in sector 0 (i.e. "foobar") and all other sectors are empty.
         //       getStatusNvram shows Next Cyclic Write 0x0.  And readNvram() shows everything in Cyclic sector 0.
         #region readNvram()
         // NVRAM has 7 sectors. Order is first RAM, then CAM.
