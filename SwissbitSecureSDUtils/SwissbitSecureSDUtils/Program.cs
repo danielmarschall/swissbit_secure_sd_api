@@ -1,8 +1,3 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -15,8 +10,23 @@ namespace SwissbitSecureSDUtils
    */
   class CardManagement
   {
-
-    // TODO: Implement activate(...)
+    // ATTENTION: THIS METHOD MAY BREAK YOUR DEVICE! IT IS NOT TESTED!
+    #region activate (Enable Data Protection)
+    [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "activate", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static extern int _activate(
+        [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+        [MarshalAs(UnmanagedType.LPArray)] byte[] password,
+        [MarshalAs(UnmanagedType.U4)] int passwordLength,
+        [MarshalAs(UnmanagedType.LPArray)] byte[] soPassword,
+        [MarshalAs(UnmanagedType.U4)] int soPasswordLength,
+        [MarshalAs(UnmanagedType.U4)] int retryCount
+        );
+    public static int activate(string deviceName, byte[] password, byte[] soPassword, int retryCount)
+    {
+      return _activate(deviceName, password, password.Length, soPassword, soPassword.Length, retryCount);
+    }
+    #endregion
 
     // TODO: Implement activateSecure(...)
 
@@ -30,7 +40,36 @@ namespace SwissbitSecureSDUtils
 
     // TODO: Implement configureNvram(...)
 
-    // TODO: Implement deactivate(...)
+    #region configureNvram
+    [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "configureNvram", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static extern int _configureNvram(
+        [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+        [MarshalAs(UnmanagedType.U4)] int ramRights,
+        [MarshalAs(UnmanagedType.U4)] int camRights,
+        [MarshalAs(UnmanagedType.U4)] int ramSize,
+        [MarshalAs(UnmanagedType.U4)] int camSize,
+        [MarshalAs(UnmanagedType.U4)] int camNext // unsure!
+        );
+    public static int configureNvram(string deviceName, int ramRights, int camRights, int ramSize, int camSize, int camNext)
+    {
+      return _configureNvram(deviceName, ramRights, camRights, ramSize, camSize, camNext);
+    }
+    #endregion
+
+    #region deactivate (Disable Data Protection)
+    [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "deactivate", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static extern int _deactivate(
+        [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+        [MarshalAs(UnmanagedType.LPArray)] byte[] soPassword,
+        [MarshalAs(UnmanagedType.U4)] int soPasswordLength
+        );
+    public static int deactivate(string deviceName, byte[] soPassword)
+    {
+      return _deactivate(deviceName, soPassword, soPassword.Length);
+    }
+    #endregion
 
     #region getApplicationVersion
     [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "getApplicationVersion", CallingConvention = CallingConvention.Cdecl)]
@@ -283,7 +322,7 @@ namespace SwissbitSecureSDUtils
     [return: MarshalAs(UnmanagedType.U4)]
     private static extern int _setExtendedSecurityFlags(
         [MarshalAs(UnmanagedType.LPStr)] string deviceName,
-        [MarshalAs(UnmanagedType.SysUInt)] int newFlags);
+        [MarshalAs(UnmanagedType.U4)] int newFlags);
     public static int setExtendedSecurityFlags(string deviceName, int newFlags)
     {
       return _setExtendedSecurityFlags(deviceName, newFlags);
@@ -309,7 +348,23 @@ namespace SwissbitSecureSDUtils
     }
     #endregion
 
-    // TODO: Implement writeNvram(...)
+    #region writeNvram
+    [DllImport("CardManagement.dll", CharSet = CharSet.Ansi, EntryPoint = "writeNvram", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static extern int _writeNvram(
+        [MarshalAs(UnmanagedType.LPStr)] string deviceName,
+        [MarshalAs(UnmanagedType.LPArray)] byte[] data,
+        [MarshalAs(UnmanagedType.U4)] int dataLength,
+        [MarshalAs(UnmanagedType.U1)] byte isCyclic,
+        [MarshalAs(UnmanagedType.U1)] byte isAppend,
+        [MarshalAs(UnmanagedType.U4)] int sector
+        );
+    public static int writeNvram(string deviceName, byte[] data, bool isCycle, bool isAppend, int sector)
+    {
+      return _writeNvram(deviceName, data, data.Length, (byte)(isCycle?1:0), (byte)(isAppend?1:0), sector);
+    }
+    #endregion
+
   }
 
   /**
@@ -433,6 +488,8 @@ namespace SwissbitSecureSDUtils
       // You can unlock and lock like this:
       //SecureSd_Unlock_Card(deviceName, "SecretPasswordHere");
       //SecureSd_Lock_Card(deviceName);
+      //CardManagement.writeNvram(deviceName, Encoding.Default.GetBytes("Hello World"), false, false, 0);
+
 
       SecureSd_DeviceInfo(deviceName);
 
