@@ -541,7 +541,7 @@ namespace SwissbitSecureSDUtils
       {
         // Secure PIN Entry
         byte[] challenge;
-        CardManagement.getLoginChallenge(deviceName, out challenge); // login challenge (also called hash challenge) gets changed after each successful login or powercycle
+        CardManagement.getLoginChallenge(deviceName, out challenge); // login challenge (also called hash challenge) gets changed after each successful or failed login, or powercycle
         byte[] code = RawSha256(CombineArrays(RawSha256(Encoding.Default.GetBytes(password)), challenge)); // TODO: Password UTF-8 or ANSI?
         res = CardManagement.verify(deviceName, code);
       }

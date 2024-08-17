@@ -7,9 +7,19 @@ This repository contains:
 
 1. Partial reverse enginerring, documentation and header files for Swissbit PS-45u DP and PU-50n DP Secure USB Stick, since the "SDK" is just a bunch of useless tools and docs, but nothing to develop software with (and this is the purpose of a Software DEVELOPMENT Kit).
 
-2. "Swissbit Secure SD Utils" (for Windows, language C#): A command line utility written in C that reads all the information of the medium. It also contains header files, so it can be used to implement programmatically lock and unlock a secure SD card or secure SD stick by calling CardManagement.dll. Note that the PU-50n DP Raspberry Pi Edition can be used as 8 GB Secure USB Stick! It is not just a dongle, but can also store data!
+2. "Unlock Card" command line tool (For Linux and Windows, language C): Can be used to unlock PS-45u (not PU-50n) if you simply want to use it as "Secure SD Card" and mount and unmount it using Linux (without booting from it). Implements low-level file access without any library.
 
-3. "Unlock Card" command line tool (For Linux, language C): Can be used to unlock PS-45u if you simply want to use it as "Secure SD Card" and mount and unmount it using Linux (without booting from it). Implements low-level file access without any library.
+```
+Linux Syntax:
+UnlockCard LOCK /mnt/sdcard/
+UnlockCard UNLOCK /mnt/sdcard/ PasswordHere
+
+Windows Syntax:
+UnlockCard.exe LOCK G:\
+UnlockCard.exe UNLOCK G:\ PasswordHere
+```
+
+3. "Swissbit Secure SD Utils" (for Windows, language C#): A command line utility written in C that reads all the information of the medium. It also contains header files, so it can be used to implement programmatically lock and unlock a secure SD card or secure SD stick by calling CardManagement.dll. Note that the PU-50n DP Raspberry Pi Edition can be used as 8 GB Secure USB Stick! It is not just a dongle, but can also store data!
 
 The C# library can help you using the USD/uSD device by calling the DLL instead of the non-working CLI EXE.
 I have also found a lot of undocumented things, e.g. how to interprete the extended security flags and how to read the Life Time Management (LTM) data.
@@ -51,7 +61,7 @@ Unlocking the card is done via the `verify()` method in CardManagement.dll.
 int LicMode, SysState, RetryCount, SoRetryCount, ResetCount, CdRomAddress, ExtSecurityFlags;
 getStatus(deviceName, &LicMode, &SysState, &RetryCount, &SoRetryCount, &ResetCount, &CdRomAddress, &ExtSecurityFlags);
 if (ExtSecurityFlags&0x10 == 0) {
-  verify(device, password);
+  verify(deviceName, password);
 }
 ```
 
@@ -62,9 +72,9 @@ int LicMode, SysState, RetryCount, SoRetryCount, ResetCount, CdRomAddress, ExtSe
 getStatus(deviceName, &LicMode, &SysState, &RetryCount, &SoRetryCount, &ResetCount, &CdRomAddress, &ExtSecurityFlags);
 if (ExtSecurityFlags&0x10 != 0) {
   char[32] challenge;
-  getHashChallenge(device, &challenge); // Alias of getLoginChallenge(). The login challenge (also called hash challenge) gets changed after each successful login or powercycle.
+  getHashChallenge(deviceName, &challenge); // Alias of getLoginChallenge(). The login challenge (also called hash challenge) gets changed after each successful or failed login, or powercycle.
   code = sha256(sha256(password) + challenge);
-  verify(device, code);
+  verify(deviceName, code);
 }
 ```
 
@@ -81,16 +91,21 @@ Return 0000 : OK
 Return 0008 : Generic read error, e.g. "Failed SCardTransmit"  (happens for some reason when you save 259+ bytes to NVRAM and then try to read it)
 Return 3790 : Happens when you save 257 bytes to NVRAM and then try to read it
 Return 3131 : Happens when you save 258 bytes to NVRAM and then try to read it
-Return 9001 : Change Protection Profile (Partition): Sum of Partition sizes is larger than total size of drive .... sometimes something else??? generic error???
 Return 6B00 : Happens at getPartitionTable if Firmware of Card is too old
 Return 6F02 : Wrong password entered or access denied
 Return 6F05 : No password entered, or password too short
 Return 6FFC : Security Settings changed; need powercycle to reload stuff
+Return 9000 : Success
+Return 9001 : Change Protection Profile (Partition): Sum of Partition sizes is larger than total size of drive .... sometimes something else??? generic error???
 ```
 
 ### CardManagement.dll API
 
 This is the current state of the research. They known methods are implemented in SwissbitSecureSDUtils (in C#).
+
+Note that `deviceName` is either the name of the USB Stick ("Smartcard Name") or the drive letter of the SD card.
+
+SD solution (PS-45u) and USB solution (PU-50n) require different DLL files!
 
 ```
 cdecl activate(dev,?,?,?,?,?)
@@ -188,10 +203,12 @@ cdecl int getControllerId(string deviceName, IntPtr conrollerId, ref int conroll
 
 cdecl int getHashChallenge(string deviceName, IntPtr challenge)
 cdecl int getLoginChallenge(string deviceName, IntPtr challenge) // alias
-   Purpose:       Returns a Nonce for the SHA256 Challenge–response authentication. Gets reset after each successful login or powercycle.
+   Purpose:       Returns a Nonce for the SHA256 Challenge–response authentication. Gets reset after each successful or failed login, or powercycle.
    Command:       570FF
-   Raw data in:   
-   Raw data out:  
+   Raw data in:   01     0000 05  FF700500 00
+                  state? ???? len(cmd      len())
+   Raw data out:  03     0000 11  000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F 9000 
+                  state? ???? len(challenge32bytes                                                 response)
 
 cdecl int getOverallSize(string deviceName, out uint OverallSize)
    Purpose:       Get memory size in units of 512 byte blocks
@@ -342,7 +359,7 @@ cdecl unblockPassword(dev,?,?,?,?)
 cdecl int verify(string deviceName, byte[] code, int codeLength)
    Purpose:       Unlocks data protection
                   If Extended Security Flag 0x10 (Secure PIN Entry) is enabled, then code=sha256(sha256(password)+challenge)
-                  where challenge comes from getHashChallenge(), which gets changed after each login or powercycle.
+                  where challenge comes from getHashChallenge(), which gets changed after each successful or failed login, or powercycle.
                   If Secure PIN Entry is disabled, then code=password.
    Command:       30FF
    Raw data in:   01     0000 0A  FF300000 05  0411223344

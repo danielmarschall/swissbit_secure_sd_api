@@ -9,6 +9,12 @@
 #include <unistd.h> // for write, close
 #endif
 
+#define ENABLE_SECURE_PIN_ENTRY
+
+#ifdef ENABLE_SECURE_PIN_ENTRY
+#include "sha256.c"
+#endif
+
 bool secure_sd_comm(char* commFileName, char* data) {
 
 #ifdef _WIN32
@@ -47,18 +53,18 @@ bool secure_sd_comm(char* commFileName, char* data) {
 
 #elif __linux__
 
-	#define BLOCKSIZE 512
-        void *buffer;
-        posix_memalign(&buffer, BLOCKSIZE, BLOCKSIZE);
-        memcpy(buffer, data, BLOCKSIZE);
+#define BLOCKSIZE 512
+	void* buffer;
+	posix_memalign(&buffer, BLOCKSIZE, BLOCKSIZE);
+	memcpy(buffer, data, BLOCKSIZE);
 	// TODO: O_DIRECT does only work with super user! isn't there any possibility for normal users?
-        int f = open(commFileName, O_CREAT|O_TRUNC|O_RDWR|O_DIRECT|O_SYNC, S_IRUSR|S_IWUSR);
-        write(f, buffer, BLOCKSIZE);
+	int f = open(commFileName, O_CREAT | O_TRUNC | O_RDWR | O_DIRECT | O_SYNC, S_IRUSR | S_IWUSR);
+	write(f, buffer, BLOCKSIZE);
 
 	for (int i = 0; i < 10; i++) {
 		memset(data, 0, sizeof(data));
 
-		usleep(200*1000); // 200ms
+		usleep(200 * 1000); // 200ms
 
 		lseek(f, 0, SEEK_SET);
 		read(f, buffer, BLOCKSIZE);
@@ -67,13 +73,13 @@ bool secure_sd_comm(char* commFileName, char* data) {
 		if (data[0] == 0x03) break; // NOT SURE: I could imagine that the first byte is the status, and 0x03 means "response data is available"
 	}
 
-        close(f);
+	close(f);
 
-        free(buffer);
+	free(buffer);
 
 #else
 
-	#error "OS not supported!"
+#error "OS not supported!"
 
 #endif
 
@@ -85,10 +91,10 @@ bool secure_sd_comm(char* commFileName, char* data) {
 int main(int argc, char** argv) {
 
 	if (
-			(argc < 2) ||
-			((strcmp(argv[1], "LOCK") != 0) && (strcmp(argv[1], "UNLOCK") != 0)) ||
-			((strcmp(argv[1], "LOCK") == 0) && (argc != 3)) ||
-			((strcmp(argv[1], "UNLOCK") == 0) && (argc != 4))
+		(argc < 2) ||
+		((strcmp(argv[1], "LOCK") != 0) && (strcmp(argv[1], "UNLOCK") != 0)) ||
+		((strcmp(argv[1], "LOCK") == 0) && (argc != 3)) ||
+		((strcmp(argv[1], "UNLOCK") == 0) && (argc != 4))
 		) {
 		fprintf(stderr, "Unlocks a Swissbit PS-45u DP card using Windows or Linux!\n");
 #ifdef _WIN32
@@ -116,8 +122,9 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "\n");
 #endif
 		fprintf(stderr, "Note: Does not work with PU-50n DP (USB).\n");
-		// TODO: Remove this note as soon as "Secure PIN Entry" is implemented.
+#ifndef ENABLE_SECURE_PIN_ENTRY
 		fprintf(stderr, "Also, \"Secure PIN Entry\" must be disabled! Does not work with PU-50n DP (USB).\n");
+#endif
 		return 2;
 	}
 
@@ -126,12 +133,11 @@ int main(int argc, char** argv) {
 	char commFileName[1024];
 	sprintf(commFileName, "%s__communicationFile", argv[2]);
 
-
 	char data[512] = { };
 
 	memset(data, 0, sizeof(data));
 	sprintf(data, "\x10\x6A\xF8\x1A\xD6\xF8\xC8\x70\xAC\x7E\x85\xF0\xE9\x9E\xF3\x9D\x1E\x11\xA1\xBA\x87\x4A\xC6\xDB\x42\x81\x15\x8E\xFE\x6D\x3C\x81"); // magic sequence
-	data[0x20] = 1; // protocol version?
+	data[0x20] = 1; // state?
 	data[0x21] = 0x00;
 	data[0x22] = 0x00;
 	data[0x23] = 5;
@@ -148,23 +154,21 @@ int main(int argc, char** argv) {
 		fwrite(data, sizeof(char), sizeof(data), fDebug);
 		fclose(fDebug);
 
-		fprintf(stderr, "Invalid response from device! (Path correct? Running as root?)\n");
+		fprintf(stderr, "Invalid response from device at getStatus()! (Path correct? Running as root?)\n");
+		return 1;
+	}
+	int response = (data[0x13] & 0xFF) << 8 + (data[0x14] & (0xFF));
+	if (response != 0x9000) {
+		fprintf(stderr, "Error 0x%x at getStatus()!\n", response);
 		return 1;
 	}
 
-	int retry = data[0x06] & 0xFF;
-	fprintf(stdout, "Retry Counter (before unlock attempt) is %d!\n", retry);
-
-	if ((data[0x12] & 0x10) != 0) {
-		// TODO: Implement "Secure PIN Entry" like this:  verify(sha256(sha256(password) + challenge)) where challenge is command 0x570FF.
-		fprintf(stderr, "You must disable \"Secure PIN Entry\" in the security settings of the device!\n");
-		return 1;
-	}
 
 	if (doLock) {
+		fprintf(stdout, "Try locking card...\n");
 		memset(data, 0, sizeof(data));
 		sprintf(data, "\x10\x6A\xF8\x1A\xD6\xF8\xC8\x70\xAC\x7E\x85\xF0\xE9\x9E\xF3\x9D\x1E\x11\xA1\xBA\x87\x4A\xC6\xDB\x42\x81\x15\x8E\xFE\x6D\x3C\x81"); // magic sequence
-		data[0x20] = 1; // protocol version?
+		data[0x20] = 1; // state?
 		data[0x21] = 0x00;
 		data[0x22] = 0x00;
 		data[0x23] = 5;
@@ -176,20 +180,94 @@ int main(int argc, char** argv) {
 	}
 	else
 	{
-		memset(data, 0, sizeof(data));
-		sprintf(data, "\x10\x6A\xF8\x1A\xD6\xF8\xC8\x70\xAC\x7E\x85\xF0\xE9\x9E\xF3\x9D\x1E\x11\xA1\xBA\x87\x4A\xC6\xDB\x42\x81\x15\x8E\xFE\x6D\x3C\x81"); // magic sequence
-		data[0x20] = 1; // protocol version?
-		data[0x21] = 0x00;
-		data[0x22] = 0x00;
-		data[0x23] = 6 + strlen(argv[3]); // length of message
-		data[0x24] = 0xFF;
-		data[0x25] = 0x30; // 0x30FF = unlock card
-		data[0x26] = 0x00;
-		data[0x27] = 0x00;
-		data[0x28] = 1 + strlen(argv[3]); // length of parameters
-		data[0x29] = strlen(argv[3]); // password length
-		sprintf(data + 0x2A, "%s", argv[3]); // password
+		int retry = data[0x06] & 0xFF;
+		fprintf(stdout, "Retry Counter (before unlock attempt) is %d!\n", retry);
+
+		if ((data[0x12] & 0x10) != 0) {
+#ifndef ENABLE_SECURE_PIN_ENTRY
+			fprintf(stdout, "Try unlocking card...\n");
+			fprintf(stderr, "You must disable \"Secure PIN Entry\" in the security settings of the device!\n");
+			return 1;
+#else
+
+			fprintf(stdout, "Try unlocking card with Secure PIN Entry...\n");
+
+			// Get the hash challenge (changed after each successful or failed login, or powercycle)
+
+			memset(data, 0, sizeof(data));
+			sprintf(data, "\x10\x6A\xF8\x1A\xD6\xF8\xC8\x70\xAC\x7E\x85\xF0\xE9\x9E\xF3\x9D\x1E\x11\xA1\xBA\x87\x4A\xC6\xDB\x42\x81\x15\x8E\xFE\x6D\x3C\x81"); // magic sequence
+			data[0x20] = 1; // state?
+			data[0x21] = 0x00;
+			data[0x22] = 0x00;
+			data[0x23] = 5; // length of message
+			data[0x24] = 0xFF;
+			data[0x25] = 0x70; // 0x570FF = get login challenge
+			data[0x26] = 0x05;
+			data[0x27] = 0x00;
+			data[0x28] = 0; // length of parameters (no data)
+			secure_sd_comm(commFileName, &data[0]);
+			if ((data[0x00] != 0x03) || (data[0x01] != 0x00) || (data[0x02] != 0x00) || (data[0x03] != 0x22)) {
+				fprintf(stderr, "Invalid response from device! (getLoginChallenge)\n");
+				return 1;
+			}
+			int response = (data[0x24] & 0xFF) << 8 + (data[0x25] & (0xFF));
+			if (response != 0x9000) {
+				fprintf(stderr, "Error 0x%x at getLoginChallenge()!\n", response);
+				return 1;
+			}
+
+			// Calculate the code which will be sent to verify():
+			// code = sha256(sha256(password) + challenge)
+
+			char tmp[512] = { };
+
+			SHA256_CTX h;
+
+			sha256_init(&h);
+			sha256_update(&h, (const BYTE*)argv[3], strlen(argv[3]));
+			sha256_final(&h, (BYTE*)&tmp[0]); // add password hash
+
+			memcpy(tmp + 0x20, data + 0x04, 32); // add challenge
+
+			sha256_init(&h);
+			sha256_update(&h, (const BYTE*)&tmp[0], 64);
+			sha256_final(&h, (BYTE*)&tmp[0]);
+
+			// Now send the code to verify()
+
+			memset(data, 0, sizeof(data));
+			sprintf(data, "\x10\x6A\xF8\x1A\xD6\xF8\xC8\x70\xAC\x7E\x85\xF0\xE9\x9E\xF3\x9D\x1E\x11\xA1\xBA\x87\x4A\xC6\xDB\x42\x81\x15\x8E\xFE\x6D\x3C\x81"); // magic sequence
+			data[0x20] = 1; // state?
+			data[0x21] = 0x00;
+			data[0x22] = 0x00;
+			data[0x23] = 6 + 32; // length of message
+			data[0x24] = 0xFF;
+			data[0x25] = 0x30; // 0x30FF = unlock card
+			data[0x26] = 0x00;
+			data[0x27] = 0x00;
+			data[0x28] = 1 + 32; // length of parameters
+			data[0x29] = 32; // code length
+			memcpy(data + 0x2A, tmp + 0, 32); // code
+#endif
+		}
+		else {
+			fprintf(stdout, "Try unlocking card with Standard PIN Entry...\n");
+			memset(data, 0, sizeof(data));
+			sprintf(data, "\x10\x6A\xF8\x1A\xD6\xF8\xC8\x70\xAC\x7E\x85\xF0\xE9\x9E\xF3\x9D\x1E\x11\xA1\xBA\x87\x4A\xC6\xDB\x42\x81\x15\x8E\xFE\x6D\x3C\x81"); // magic sequence
+			data[0x20] = 1; // state?
+			data[0x21] = 0x00;
+			data[0x22] = 0x00;
+			data[0x23] = 6 + strlen(argv[3]); // length of message
+			data[0x24] = 0xFF;
+			data[0x25] = 0x30; // 0x30FF = unlock card
+			data[0x26] = 0x00;
+			data[0x27] = 0x00;
+			data[0x28] = 1 + strlen(argv[3]); // length of parameters
+			data[0x29] = strlen(argv[3]); // password length
+			sprintf(data + 0x2A, "%s", argv[3]); // password
+		}
 	}
+
 	secure_sd_comm(commFileName, &data[0]);
 
 	if ((data[0x00] != 0x03) || (data[0x01] != 0x00) || (data[0x02] != 0x00) || (data[0x03] != 0x02)) {
@@ -197,7 +275,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	int response = (data[0x04] & 0xFF) << 8 + (data[0x05] & (0xFF));
+	response = (data[0x04] & 0xFF) << 8 + (data[0x05] & (0xFF));
 
 	if (response == 0x9000) {
 		char tmpFileName[1024];
