@@ -7,12 +7,16 @@ This repository contains:
 
 1. Partial reverse enginerring, documentation and header files for Swissbit PS-45u DP and PU-50n DP Secure USB Stick, since the "SDK" is just a bunch of useless tools and docs, but nothing to develop software with (and this is the purpose of a Software DEVELOPMENT Kit).
 
-2. "Unlock Card" command line tool (For Linux and Windows, language C): Can be used to unlock PS-45u (not PU-50n) if you simply want to use it as "Secure SD Card" and mount and unmount it using Linux (without booting from it). Implements low-level file access without any library.
+2. "Unlock Card" command line tool (For Linux, Windows, and macOS, language C): Can be used to unlock PS-45u (not PU-50n) if you simply want to use it as "Secure SD Card" and mount and unmount it using Linux (without booting from it). Implements low-level file access without any library.
 
 ```
 Linux Syntax:
 UnlockCard LOCK /mnt/sdcard/
 UnlockCard UNLOCK /mnt/sdcard/ PasswordHere
+
+macOS Syntax:
+UnlockCard LOCK /Volumes/sdcard/
+UnlockCard UNLOCK /Volumes/sdcard/ PasswordHere
 
 Windows Syntax:
 UnlockCard.exe LOCK G:\
@@ -119,7 +123,8 @@ __cdecl int activateSecure(dev,?)
    Purpose:       Unknown
    Command:       20010FF
    Raw data in:   
-   Raw data out:  
+   Raw data out:
+   +++ JUST A THEORY (!!) Enables data protection in a mode that there are no passwords and instead there is just one 256 bit key
 
 __cdecl int challengeFirmware(dev,?,?,?)
    Purpose:       Unknown
@@ -149,7 +154,7 @@ __cdecl int clearProtectionProfiles(char* szDeviceName)
 __cdecl int configureNvram(char* szDeviceName, int ramRights, int camRights, int ramSize, int camSize, int camNext???)
    Purpose:       Configures the NVRAM of the device
                   Note: I am not sure about the last parameter. It is always 0 if I use the Device Manager. It is probably CAM next cycle.
-                  Also, if I check "Fuse Peristently", the ram/camRights are still the same. Shouldn't flag 0x80 be set? I don't want to try it, so I stopped the debugger at that point. Seems to be a bug in CardManager.exe
+                  Also, if I check "Fuse Persistently", the ram/camRights are still the same (tested with CardManager 4.0). Shouldn't flag 0x80 be set? I don't want to try it, so I stopped the debugger at that point. Seems to be a bug in CardManager.exe
    Command:       380FF
    Raw data in:   
    Raw data out:  
@@ -368,7 +373,8 @@ __cdecl int setSecureActivationKey(dev,?)
    Purpose:       Unknown
    Command:       780FF
    Raw data in:   
-   Raw data out:  
+   Raw data out:
+   +++ JUST A THEORY (!!) Changes the 256 bit key set by activateSecure().
 
 __cdecl int unblockPassword(dev,?,?,?,?)
    Purpose:       Unknown
@@ -522,50 +528,49 @@ Looking at the disassembly, the SmartCard API seems to use the same commands, bu
 
 #### Request
 
-(TODO: Implement and analyze more commands. Also find out the return data.)
+The syntax for raw commands can be seen above at the API section. Here is a list of all command codes sorted by code.
 
 ```
    ---------------------------------------------------------------------------------------------------------------------
-    Command DLL name                        Parameter description                Example data
+    Command DLL name
    ---------------------------------------------------------------------------------------------------------------------
-       10FF activate(dev,?,?,?,?,?)
-    20010FF activateSecure(dev,?)
-       20FF deactivate(dev,?,?)
-       30FF verify(dev,code) = unlock card  Code with 8 bit length prefix        01 00 00 0A FF 30 00 00 05 04 11 22 33 44
-       31FF lockCard(dev)                   None (len=0)                         01 00 00 05 FF 31 00 00 00
-       40FF changePassword(dev,?,?,?,?)
-       50FF unblockPassword(dev,?,?,?,?)
-       53FF setCdromAreaBackToDefault(dev)
-      253FF setCdromAreaAndReadException(dev,?,?)
-      353FF clearProtectionProfiles(dev)
-    10353FF setProtectionProfiles(dev,?,?)
-       ???? resetAndFormat(dev,?,?)         not yet implemented / analyzed
-       60FF reset(dev,null,0)               not yet implemented / analyzed
-    10060FF reset(dev,password,passwordLen) not yet implemented / analyzed
-       70FF getStatus(dev,...)              None (len=0)                         01 00 00 05 FF 70 00 00 00
-      170FF getCardId(dev,...)              None (len=0)                         01 00 00 05 FF 70 01 00 00
-      270FF getApplicationVersion(dev,...)  None (len=0)                         01 00 00 05 FF 70 02 00 00
-    10270FF getBaseFWVersion(dev,...)       None (len=0)                         01 00 00 05 FF 70 02 01 00
-      370FF getStatusNvram(dev,...)         None (len=0)                         01 00 00 05 FF 70 03 00 00
-      470FF getStatusException(dev,...)     None (len=0)                         01 00 00 05 FF 70 04 00 00
-      570FF getLoginChallenge(dev,?)        not yet implemented / analyzed
-      670FF getControllerId(dev,...)        None (len=0)                         01 00 00 05 FF 70 06 00 00
-      770FF getProtectionProfiles(dev,...)  None (len=0)                         01 00 00 05 FF 70 07 00 00
-      870FF getPartitionTable(dev,...)
-      970FF getOverallSize(dev,...)
-      380FF configureNvram(dev,?,?,?,?,?)   not yet implemented / analyzed 
-      580FF setExtendedSecurityFlags(dev,?) not yet implemented / analyzed
-      680FF setAuthenticityCheckSecret(dev,?,0), stored clear-text?
-     1680FF setAuthenticityCheckSecret(dev,?,1), store hashed?
-      780FF setSecureActivationKey(dev,?)   not yet implemented / analyzed
-       D0FF readNvram(0,c), i.e. RAM        32 byte sector count <c>             01 00 00 09 FF D0 00 00 04 00 00 00 07
-      1D0FF readNvram(1,c), i.e. cyclic     32 byte sector count <c>             01 00 00 09 FF D0 01 00 04 00 00 00 07
-       D1FF writeNvram(dev,?,0,?,0,?)       not yet implemented / analyzed
-      1D1FF writeNvram(dev,?,1,?,0,?)       not yet implemented / analyzed
-    100D1FF writeNvram(dev,?,0,?,1,?)       not yet implemented / analyzed
-    101D1FF writeNvram(dev,?,1,?,1,?)       not yet implemented / analyzed
-       F1FF challengeFirmware(dev,?,?,?)    not yet implemented / analyzed 
-       F2FF checkAuthenticity(dev,?,?)      not yet implemented / analyzed 
+       10FF activate
+    20010FF activateSecure
+       20FF deactivate
+       30FF verify, i.e. unlock card
+       31FF lockCard
+       40FF changePassword
+       50FF unblockPassword
+       53FF setCdromAreaBackToDefault
+      253FF setCdromAreaAndReadException
+      353FF clearProtectionProfiles
+    10353FF setProtectionProfiles
+       60FF reset (without password)
+    10060FF reset (with password)
+       70FF getStatus
+      170FF getCardId
+      270FF getApplicationVersion
+    10270FF getBaseFWVersion
+      370FF getStatusNvram
+      470FF getStatusException
+      570FF getLoginChallenge
+      670FF getControllerId
+      770FF getProtectionProfiles
+      870FF getPartitionTable
+      970FF getOverallSize
+      380FF configureNvram
+      580FF setExtendedSecurityFlags
+      680FF setAuthenticityCheckSecret
+     1680FF setAuthenticityCheckSecret (unknown variant)
+      780FF setSecureActivationKey
+       D0FF readNvram (RAM)
+      1D0FF readNvram (CAM)
+       D1FF writeNvram (RAM, no append)
+      1D1FF writeNvram (CAM, no append)
+    100D1FF writeNvram (RAM, append)
+    101D1FF writeNvram (CAM, append)
+       F1FF challengeFirmware
+       F2FF checkAuthenticity
       (DLL) getVersion
       (DLL) getBuildDateAndTime
    ---------------------------------------------------------------------------------------------------------------------
