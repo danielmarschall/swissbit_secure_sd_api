@@ -74,6 +74,9 @@ bool secure_sd_comm(char* commFileName, char* data) {
 	int f = open(commFileName, O_CREAT | O_TRUNC | O_RDWR | O_DIRECT | O_SYNC, S_IRUSR | S_IWUSR);
 	write(f, buffer, BLOCKSIZE);
 
+	// Does not work
+	//posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+
 	for (int i = 0; i < 10; i++) {
 		memset(data, 0, BLOCKSIZE);
 
@@ -110,7 +113,6 @@ bool secure_sd_comm(char* commFileName, char* data) {
 	}
 	
 	// Disable caching (because macOS does not have O_DIRECT, we need to use F_NOCACHE)
-	// TODO: check if this solves the "require root" problem with Linux
 	if (fcntl(f, F_NOCACHE, 1) == -1) {
 		perror("Failed to disable cache");
 		close(f);
