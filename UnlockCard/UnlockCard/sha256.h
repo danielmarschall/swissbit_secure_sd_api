@@ -21,7 +21,7 @@
 
 /**************************** DATA TYPES ****************************/
 typedef unsigned char BYTE;             // 8-bit byte
-typedef unsigned uint32_t DWORD;
+typedef uint32_t DWORD;
 
 typedef struct {
 	BYTE data[64];
