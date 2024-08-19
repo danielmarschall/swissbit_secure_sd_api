@@ -364,13 +364,13 @@ int main(int argc, char** argv) {
 			data[0x20] = 1; // state?
 			data[0x21] = 0x00;
 			data[0x22] = 0x00;
-			data[0x23] = 6 + strlen(argv[3]); // length of message
+			data[0x23] = (char)(6 + strlen(argv[3])); // length of message
 			data[0x24] = 0xFF;
 			data[0x25] = 0x30; // 0x30FF = unlock card
 			data[0x26] = 0x00;
 			data[0x27] = 0x00;
-			data[0x28] = 1 + strlen(argv[3]); // length of parameters
-			data[0x29] = strlen(argv[3]); // password length
+			data[0x28] = char(1 + strlen(argv[3])); // length of parameters
+			data[0x29] = char(strlen(argv[3])); // password length
 			sprintf(data + 0x2A, "%s", argv[3]); // password
 		}
 	}

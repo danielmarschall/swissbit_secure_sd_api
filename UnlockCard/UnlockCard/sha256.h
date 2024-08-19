@@ -6,8 +6,9 @@
 * Details:    Defines the API for the corresponding SHA1 implementation.
 *********************************************************************/
 
-// Changed 17 August 2024 by Daniel Marschall
-// There is no 32-bit "WORD". A 32-bit data type is DWORD. Changed. Now it compiles with Windows.
+// Changed 19 August 2024 by Daniel Marschall
+// There is no 32-bit "WORD". Changed to `uint32_t` in order to support Windows builds.
+// https://github.com/B-Con/crypto-algorithms/issues/35
 
 #ifndef SHA256_H
 #define SHA256_H
@@ -21,13 +22,12 @@
 
 /**************************** DATA TYPES ****************************/
 typedef unsigned char BYTE;             // 8-bit byte
-typedef uint32_t DWORD;
 
 typedef struct {
 	BYTE data[64];
-	DWORD datalen;
+	uint32_t datalen;
 	unsigned long long bitlen;
-	DWORD state[8];
+	uint32_t state[8];
 } SHA256_CTX;
 
 /*********************** FUNCTION DECLARATIONS **********************/
