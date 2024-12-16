@@ -5,9 +5,11 @@
 
 This repository contains:
 
-1. Partial reverse enginerring, documentation and header files for Swissbit PS-45u DP and PU-50n DP Secure USB Stick, since the "SDK" is just a bunch of useless tools and docs, but nothing to develop software with (and this is the purpose of a Software DEVELOPMENT Kit).
+1. Research, documentation and header files for Swissbit PS-45u DP and PU-50n DP Secure USB Stick, since the "SDK" is just a bunch of useless tools and docs, but nothing to develop software with (and this is the purpose of a Software DEVELOPMENT Kit).
 
-2. "Unlock Card" command line tool (For Linux, Windows, and macOS, language C): Can be used to unlock PS-45u (not PU-50n) if you simply want to use it as "Secure SD Card" and mount and unmount it using Linux (without booting from it). Implements low-level file access without any library.
+2. Patch for CardManagerLite.exe and CardManagerCLI.exe to support PU-50n DP (USB Stick), see below.
+
+3. An "Unlock Card" command line tool (For Linux, Windows, and macOS, language C): Can be used to unlock PS-45u (not PU-50n) if you simply want to use it as "Secure SD Card" and mount and unmount it using Linux (without booting from it). Implements low-level file access without any library.
 
 ```
 Linux Syntax:
@@ -23,7 +25,7 @@ UnlockCard.exe LOCK G:\
 UnlockCard.exe UNLOCK G:\ PasswordHere
 ```
 
-3. "Swissbit Secure SD Utils" (for Windows, language C#): A command line utility written in C that reads all the information of the medium. It also contains header files, so it can be used to implement programmatically lock and unlock a secure SD card or secure SD stick by calling CardManagement.dll. Note that the PU-50n DP Raspberry Pi Edition can be used as 8 GB Secure USB Stick! It is not just a dongle, but can also store data!
+4. "Swissbit Secure SD Utils" (for Windows, language C#): A command line utility written in C that reads all the information of the medium. It also contains header files, so it can be used to implement programmatically lock and unlock a secure SD card or secure SD stick by calling CardManagement.dll. Note that the PU-50n DP Raspberry Pi Edition can be used as 8 GB Secure USB Stick! It is not just a dongle, but can also store data!
 
 The C# library can help you using the USD/uSD device by calling the DLL instead of the non-working CLI EXE.
 I have also found a lot of undocumented things, e.g. how to interprete the extended security flags and how to read the Life Time Management (LTM) data.
@@ -595,10 +597,11 @@ The syntax for raw commands can be seen above at the API section. Here is a list
 
 ## Disclaimer
 
-I am not responsible for any damages that may cause
+This is a research project I developed in my spare time because I was curious how these devices work and how the SDK communicates with them. I published my research in believe that it might be interesting for other people that are curious about these technical topics too, as well as people who might find usage by programatically locking and unlocking the secure SD card.
+
+Please note that I am not responsible for any damages that may cause
 by using this API or documentation. Note that
-programmatically logging in with wrong password
-(or wrong implementation) can destroy the device.
+programmatically accessing the interface with wrong keys (or wrong implementation) can destroy the device.
 
 Use this API for private use only.
 If you need this API commercially, please
